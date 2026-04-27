@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the Model Works — DC Housing Feasibility Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --navy: #1e3a5f;
+  --blue: #2563eb;
+  --blue-light: #dbeafe;
+  --green: #15803d;
+  --green-bg: #dcfce7;
+  --orange: #c2410c;
+  --orange-bg: #ffedd5;
+  --red: #b91c1c;
+  --red-bg: #fee2e2;
+  --gray-50: #f8fafc;
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-400: #94a3b8;
+  --gray-500: #64748b;
+  --gray-700: #334155;
+  --gray-900: #0f172a;
+  --code-bg: #1e293b;
+  --sidebar-w: 230px;
+  --content-max: 780px;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--gray-900);
+  background: var(--gray-50);
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+#wrapper { display: flex; min-height: 100vh; }
+
+#sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--navy);
+  color: #fff;
+  padding: 24px 0 40px;
+  display: flex;
+  flex-direction: column;
+}
+
+#sidebar .logo {
+  padding: 0 20px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+  margin-bottom: 12px;
+}
+#sidebar .logo h2 { font-size: 13px; font-weight: 700; letter-spacing: .04em; color: #94c6ff; text-transform: uppercase; }
+#sidebar .logo p { font-size: 11px; color: rgba(255,255,255,.5); margin-top: 4px; line-height: 1.4; }
+
+#sidebar nav a {
+  display: block;
+  padding: 7px 20px 7px 16px;
+  font-size: 12.5px;
+  color: rgba(255,255,255,.65);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: all .15s;
+  line-height: 1.4;
+}
+#sidebar nav a:hover, #sidebar nav a.active {
+  color: #fff;
+  background: rgba(255,255,255,.07);
+  border-left-color: #60a5fa;
+}
+#sidebar nav .nav-group {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.3);
+  padding: 14px 20px 4px;
+}
+#sidebar .back-link {
+  margin-top: auto;
+  padding: 16px 20px 0;
+  border-top: 1px solid rgba(255,255,255,.12);
+}
+#sidebar .back-link a { font-size: 12px; color: #60a5fa; text-decoration: none; }
+#sidebar .back-link a:hover { text-decoration: underline; }
+
+#main {
+  flex: 1;
+  min-width: 0;
+  padding: 48px 48px 80px;
+}
+
+/* ── Content sections ─────────────────────────────────────────────────── */
+.section { max-width: var(--content-max); margin-bottom: 64px; }
+.section:target { scroll-margin-top: 24px; }
+
+h1 { font-size: 28px; font-weight: 700; color: var(--navy); line-height: 1.2; margin-bottom: 12px; }
+h2 { font-size: 20px; font-weight: 700; color: var(--navy); margin-bottom: 12px; margin-top: 0; }
+h3 { font-size: 15px; font-weight: 600; color: var(--gray-700); margin-bottom: 8px; margin-top: 24px; }
+p { margin-bottom: 14px; }
+p:last-child { margin-bottom: 0; }
+
+.subtitle { font-size: 17px; color: var(--gray-500); margin-bottom: 28px; line-height: 1.5; }
+
+/* ── Callout boxes ───────────────────────────────────────────────────────── */
+.callout {
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 20px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.callout.blue { background: var(--blue-light); border-left: 4px solid var(--blue); }
+.callout.green { background: var(--green-bg); border-left: 4px solid var(--green); }
+.callout.orange { background: var(--orange-bg); border-left: 4px solid var(--orange); }
+.callout strong { font-weight: 600; }
+
+/* ── Pipeline flow ───────────────────────────────────────────────────────── */
+.pipeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 24px 0;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pipe-step {
+  background: #fff;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 12px 16px;
+  text-align: center;
+  font-size: 12px;
+  min-width: 110px;
+}
+.pipe-step .file { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--blue); font-weight: 500; margin-bottom: 3px; }
+.pipe-step .desc { color: var(--gray-500); line-height: 1.3; }
+.pipe-arrow { color: var(--gray-400); font-size: 18px; padding: 0 2px; flex-shrink: 0; }
+
+/* ── Data sources table ──────────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 16px 0; }
+.data-table th { text-align: left; padding: 8px 12px; background: var(--gray-100); font-weight: 600; font-size: 12px; color: var(--gray-700); border-bottom: 2px solid var(--gray-200); }
+.data-table td { padding: 9px 12px; border-bottom: 1px solid var(--gray-200); vertical-align: top; line-height: 1.45; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table .source-name { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--navy); font-weight: 500; }
+.data-table .tag { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 10px; background: var(--blue-light); color: var(--blue); font-weight: 600; margin-top: 3px; }
+
+/* ── Code blocks ─────────────────────────────────────────────────────────── */
+.code-block { margin: 20px 0; }
+.code-block details { }
+.code-block summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--code-bg);
+  color: #94a3b8;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  user-select: none;
+  list-style: none;
+  border-bottom: 1px solid #2d3a52;
+}
+.code-block details:not([open]) summary { border-radius: 6px; }
+.code-block summary::before { content: '▶'; font-size: 9px; color: #475569; transition: transform .15s; }
+.code-block details[open] summary::before { transform: rotate(90deg); }
+.code-block summary::-webkit-details-marker { display: none; }
+.code-block summary .fn-name { color: #7dd3fc; }
+.code-block summary .fn-file { color: #475569; margin-left: auto; font-size: 11px; }
+.code-block pre[class*=language-] { margin: 0; border-radius: 0 0 6px 6px; font-size: 12.5px; font-family: 'JetBrains Mono', monospace; }
+
+/* Inline code */
+code { font-family: 'JetBrains Mono', monospace; font-size: .875em; background: var(--gray-100); padding: 1px 5px; border-radius: 3px; color: var(--navy); }
+
+/* ── Assumption table ────────────────────────────────────────────────────── */
+.assumption-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+.assumption-card {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.assumption-card .label { font-size: 11px; color: var(--gray-500); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; margin-bottom: 4px; }
+.assumption-card .value { font-size: 22px; font-weight: 700; color: var(--navy); }
+.assumption-card .sub { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+
+/* ── Feasibility tests ───────────────────────────────────────────────────── */
+.test-grid { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+.test-card {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.test-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.test-badge.yoc { background: #dbeafe; color: #1d4ed8; }
+.test-badge.roc { background: #f0fdf4; color: #15803d; }
+.test-badge.rlv { background: #fef3c7; color: #92400e; }
+.test-content .test-title { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+.test-content .test-formula { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--blue); margin-bottom: 4px; }
+.test-content .test-desc { font-size: 13px; color: var(--gray-700); }
+
+/* ── Example parcel cards ────────────────────────────────────────────────── */
+.example-grid { display: flex; flex-direction: column; gap: 20px; margin: 20px 0; }
+
+.example-card {
+  background: #fff;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.example-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--gray-100);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.example-header .ex-title { font-size: 15px; font-weight: 700; color: var(--navy); }
+.example-header .ex-meta { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+.ex-badge {
+  font-size: 11px; font-weight: 600; padding: 3px 10px;
+  border-radius: 12px; white-space: nowrap; flex-shrink: 0;
+}
+.ex-badge.infeasible { background: var(--orange-bg); color: var(--orange); }
+.ex-badge.eligible { background: #f0f9ff; color: #0369a1; }
+.ex-badge.social { background: var(--green-bg); color: var(--green); }
+
+.example-body { padding: 16px 20px; }
+
+.ex-stat-row { display: flex; gap: 20px; margin-bottom: 14px; flex-wrap: wrap; }
+.ex-stat { }
+.ex-stat .s-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--gray-400); margin-bottom: 1px; }
+.ex-stat .s-val { font-size: 14px; font-weight: 600; color: var(--gray-900); }
+
+/* Rent gap bar */
+.rent-gap { margin: 14px 0 10px; }
+.rent-gap .rg-label { font-size: 12px; font-weight: 600; color: var(--gray-700); margin-bottom: 6px; display: flex; justify-content: space-between; }
+.rent-gap .rg-bar-wrap { height: 22px; background: var(--gray-100); border-radius: 4px; overflow: hidden; display: flex; }
+.rg-actual { background: #3b82f6; height: 100%; display: flex; align-items: center; padding-left: 6px; }
+.rg-actual span { font-size: 10px; font-weight: 600; color: #fff; white-space: nowrap; }
+.rg-gap { background: #fca5a5; height: 100%; display: flex; align-items: center; padding-left: 6px; }
+.rg-gap span { font-size: 10px; font-weight: 600; color: #7f1d1d; white-space: nowrap; }
+.rg-caption { font-size: 11px; color: var(--gray-500); margin-top: 4px; }
+
+/* Expandable pro-forma */
+.pf-details { margin-top: 12px; }
+.pf-details summary {
+  font-size: 12px; color: var(--blue); cursor: pointer;
+  list-style: none; display: flex; align-items: center; gap: 5px;
+  padding: 4px 0; user-select: none;
+}
+.pf-details summary::-webkit-details-marker { display: none; }
+.pf-details summary::before { content: '▶'; font-size: 9px; transition: transform .12s; }
+.pf-details[open] summary::before { transform: rotate(90deg); }
+
+.pf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+  font-size: 13px;
+}
+.pf-col h4 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--gray-500); margin-bottom: 8px; }
+.pf-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--gray-100); }
+.pf-row:last-child { border-bottom: none; }
+.pf-row .pf-key { color: var(--gray-700); }
+.pf-row .pf-val { font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.pf-row .pf-val.red { color: var(--red); }
+.pf-row .pf-val.green { color: var(--green); }
+.pf-row .pf-val.blue { color: var(--blue); }
+
+.pf-verdict {
+  grid-column: 1/-1;
+  background: var(--orange-bg);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--orange);
+}
+.pf-verdict.green-v { background: var(--green-bg); color: var(--green); }
+
+/* ── Limitations list ────────────────────────────────────────────────────── */
+.limitation-list { list-style: none; padding: 0; margin: 12px 0; }
+.limitation-list li {
+  padding: 10px 0 10px 28px;
+  border-bottom: 1px solid var(--gray-200);
+  position: relative;
+  font-size: 14px;
+}
+.limitation-list li:last-child { border-bottom: none; }
+.limitation-list li::before {
+  content: '△';
+  position: absolute;
+  left: 4px;
+  color: var(--orange);
+  font-size: 12px;
+}
+.limitation-list li strong { font-weight: 600; }
+
+/* ── Scenario comparison ─────────────────────────────────────────────────── */
+.scenario-table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 16px 0; }
+.scenario-table th { text-align: left; padding: 10px 14px; background: var(--navy); color: #fff; font-size: 12px; font-weight: 600; letter-spacing: .03em; }
+.scenario-table td { padding: 10px 14px; border-bottom: 1px solid var(--gray-200); }
+.scenario-table tr:last-child td { border-bottom: none; }
+.scenario-table tr:nth-child(even) td { background: var(--gray-50); }
+.scenario-table .num { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
+.scenario-table .highlight { font-weight: 700; color: var(--blue); }
+
+/* ── Finding visualization ───────────────────────────────────────────────── */
+.rent-gap-visual {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin: 20px 0;
+}
+.rent-gap-visual h3 { margin-top: 0; margin-bottom: 16px; color: var(--navy); }
+.market-row { margin-bottom: 14px; }
+.market-row .market-name { font-size: 12px; font-weight: 600; color: var(--gray-700); margin-bottom: 6px; display: flex; justify-content: space-between; }
+.market-bar-wrap { height: 28px; background: var(--gray-100); border-radius: 4px; overflow: hidden; display: flex; }
+.bar-actual { height: 100%; display: flex; align-items: center; padding: 0 8px; }
+.bar-actual span { font-size: 10.5px; font-weight: 600; color: #fff; white-space: nowrap; }
+.bar-gap-fill { height: 100%; background: #fed7aa; }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  #sidebar { display: none; }
+  #main { padding: 24px 20px 60px; }
+  .assumption-grid { grid-template-columns: 1fr; }
+  .pf-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div id="wrapper">
+
+<!-- ── Sidebar nav ─────────────────────────────────────────────────────── -->
+<aside id="sidebar">
+  <div class="logo">
+    <h2>DC Housing Model</h2>
+    <p>Methodology &amp; Technical Reference</p>
+  </div>
+  <nav>
+    <div class="nav-group">Overview</div>
+    <a href="#intro">What This Model Does</a>
+    <a href="#pipeline">How the Pipeline Works</a>
+    <a href="#data">Input Data</a>
+
+    <div class="nav-group">The Four Steps</div>
+    <a href="#step1">Step 1 — Parcel Assembly</a>
+    <a href="#step2">Step 2 — Development Envelope</a>
+    <a href="#step3">Step 3 — Soft Sites</a>
+    <a href="#step4">Step 4 — The Pro-Forma</a>
+
+    <div class="nav-group">Policy &amp; Results</div>
+    <a href="#scenarios">Policy Scenarios</a>
+    <a href="#finding">The Core Finding</a>
+    <a href="#examples">Example Parcels</a>
+    <a href="#limitations">Limitations</a>
+  </nav>
+  <div class="back-link">
+    <a href="index.html">← Back to Dashboard</a>
+  </div>
+</aside>
+
+<!-- ── Main content ────────────────────────────────────────────────────── -->
+<main id="main">
+
+<!-- ── SECTION: Intro ─────────────────────────────────────────────────── -->
+<section class="section" id="intro">
+  <h1>How the Model Works</h1>
+  <p class="subtitle">A technical explanation of the DC Housing Feasibility Simulator — how it identifies development sites, computes what can be built, and tests whether a project would earn a market return.</p>
+
+  <div class="callout blue">
+    <strong>The central question:</strong> Given every privately-owned parcel in Washington DC, which ones are (a) physically capable of supporting new apartment construction, and (b) financially viable for a developer to build at current market rents?
+  </div>
+
+  <p>The model works in four stages. First, it assembles a complete picture of every DC parcel — its size, what's on it today, what zoning allows, and what rents the neighborhood commands. Second, it computes the maximum building that could legally be constructed on each parcel. Third, it filters to "soft sites" — parcels where the existing building is substantially smaller than what zoning allows, making redevelopment a realistic possibility. Fourth, it runs a pro-forma financial test for each soft site to determine whether a market-rate apartment building would earn a sufficient return.</p>
+
+  <p>This methodology is adapted from the <a href="https://ternercenter.berkeley.edu/" style="color:var(--blue)">Terner Center for Housing Innovation</a> at UC Berkeley, modified for DC's unique regulatory environment — particularly the federal Height Act of 1910, which imposes building height limits that exist in no other major American city.</p>
+
+  <p>Three policy scenarios are tested: a baseline (current rules), the Lewis George 2026 mayoral platform, and the McDuffie 2026 platform. The model is designed to be <em>empirical, not directional</em> — it reports what each scenario would physically and financially enable, without presuming what outcome is desirable.</p>
+</section>
+
+<!-- ── SECTION: Pipeline ──────────────────────────────────────────────── -->
+<section class="section" id="pipeline">
+  <h2>How the Pipeline Works</h2>
+  <p>The Python pipeline has five modules that run in sequence:</p>
+
+  <div class="pipeline">
+    <div class="pipe-step">
+      <div class="file">merge.py</div>
+      <div class="desc">Joins 6 source datasets into one parcel record per lot</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="file">envelope.py</div>
+      <div class="desc">Computes maximum buildable floor area per parcel</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="file">run.py</div>
+      <div class="desc">Filters to soft sites; orchestrates scenarios</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="file">proforma.py</div>
+      <div class="desc">Tests financial viability of each soft site</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="file">policy.py</div>
+      <div class="desc">Defines scenario parameter overrides</div>
+    </div>
+  </div>
+
+  <p>The dashboard loads a pre-computed snapshot of 4,250 physical soft sites from <code>docs/data/soft_sites.json</code>. All pro-forma math runs live in the browser's JavaScript as you adjust the sliders, which is why parameter changes are instant.</p>
+</section>
+
+<!-- ── SECTION: Data ──────────────────────────────────────────────────── -->
+<section class="section" id="data">
+  <h2>Input Data</h2>
+  <p>All source data is publicly available from DC's open data portal. The pipeline joins six datasets using the SSL (Square, Suffix, Lot) parcel identifier.</p>
+
+  <table class="data-table">
+    <thead>
+      <tr><th>Dataset</th><th>What It Contributes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="source-name">Integrated_Tax_System_Public_Extract.csv</span><br><span class="tag">ITSPE</span></td>
+        <td>The backbone: lot area, ownership, assessed values, ward, neighborhood, street address. Covers all ~220,000 DC parcels.</td>
+      </tr>
+      <tr>
+        <td><span class="source-name">Computer_Assisted_Mass_Appraisal_-_Residential.csv</span><br><span class="tag">CAMA Residential</span></td>
+        <td>Existing building size (gross building area), number of stories, year built, and condition for residential structures.</td>
+      </tr>
+      <tr>
+        <td><span class="source-name">COMMERCIAL_(CAMA).csv</span><br><span class="tag">CAMA Commercial</span></td>
+        <td>Existing gross floor area and wall height for commercial buildings.</td>
+      </tr>
+      <tr>
+        <td><span class="source-name">Zoning_Lookup_Layer.csv</span><br><span class="tag">Zoning</span></td>
+        <td>ZR16 zone code, historic district flag, Inclusionary Zoning designation, PUD status, ANC identifier (used as a proxy for metro adjacency in the pipeline; the dashboard export uses actual parcel coordinates instead).</td>
+      </tr>
+      <tr>
+        <td><span class="source-name">Zoning_Development_Standards.csv</span><br><span class="tag">ZDS</span></td>
+        <td>Numeric zoning rules by zone code: FAR limit, height limit, lot occupancy percentage, setbacks.</td>
+      </tr>
+      <tr>
+        <td><span class="source-name">Roadway_Block.csv + Metro_Stations.csv</span><br><span class="tag">Geometry</span></td>
+        <td>Street cross-section width (for Height Act calculations) and Metrorail station locations (for McDuffie's transit-area policy).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>Neighborhood-level apartment rents come from a separate <code>submarket_rents.yaml</code> file calibrated against RentHop and CoStar data for DC submarkets. The model assigns rents by neighborhood-ward combination, with ward-level and citywide fallbacks.</p>
+</section>
+
+<!-- ── SECTION: Step 1 ────────────────────────────────────────────────── -->
+<section class="section" id="step1">
+  <h2>Step 1 — Assembling the Parcel Universe</h2>
+  <p><code>merge.py</code> joins the six source datasets and computes several derived fields.</p>
+
+  <h3>Land Cost</h3>
+  <p>The model needs an estimate of what a developer would pay to acquire each parcel. In an ideal world, this would come from recent arms-length sales. In practice, only about 27.5% of eligible parcels have post-2022 transaction data. The model uses a three-tier fallback:</p>
+  <ol style="margin: 10px 0 10px 24px; line-height: 1.8; font-size: 14px;">
+    <li>DC assessed land value (from ITSPE) — available for most parcels</li>
+    <li>Neighborhood median assessed land value per SF (same use class) — fills gaps where assessment is zero</li>
+    <li>Ward-level median, then a citywide default of $50/SF — last resort</li>
+  </ol>
+  <p>Assessed values systematically underestimate market value in DC — particularly in rapidly appreciating neighborhoods — which means the model's land cost inputs are probably conservative. The RLV test (described below) is calibrated against assessed land value, which partially corrects for this.</p>
+
+  <h3>Ownership Filter</h3>
+  <p>Parcels owned by government, universities, hospitals, foreign embassies, or religious institutions are classified as <code>public_or_nonprofit</code> and excluded from the private market-rate analysis entirely. These parcels are not in <code>soft_sites.json</code> and are not displayed on the dashboard map. The Python pipeline runs a separate social housing pro-forma for public land under the Lewis George scenario, but that analysis is not currently surfaced in the dashboard. The classification uses a combination of DC's tax-exempt rate flag and an owner name string match against a list of institutional patterns.</p>
+
+  <h3>Zone Normalization</h3>
+  <p>DC's ZR16 zoning codes have sub-variants (e.g., <code>NMU-7B</code>, <code>MU-5B</code>, <code>BF-2A</code>) that aren't directly listed in the Zoning Development Standards. <code>merge.py</code> maps these to the closest canonical zone code for development standards lookup. For example, all NMU (Neighborhood Mixed-Use) variants map to their MU equivalents per ZR16 §300.</p>
+
+  <h3>Metro Adjacency</h3>
+  <p>Metro adjacency is computed at two stages in the pipeline, with different precision at each:</p>
+  <ul style="margin: 8px 0 12px 24px; line-height: 1.8; font-size: 14px;">
+    <li><strong>Python pipeline (<code>merge.py</code>):</strong> Uses Advisory Neighborhood Commission (ANC) centroids as a proxy — the finest geographic unit in the zoning data. ANCs whose centroid falls within 0.5 miles of any DC Metrorail station are flagged as metro-adjacent. This flag drives McDuffie's Height Act amendment in the envelope computation.</li>
+    <li><strong>Dashboard export (<code>export_dashboard_data.py</code>):</strong> Recomputes metro adjacency using <em>actual parcel centroids</em> from the parcel shapefile and haversine distance to each station. This per-parcel calculation determines the zone eligibility tier (<code>el</code>) displayed in the dashboard and is more accurate than the ANC proxy. It is computed at export time rather than pipeline time because it requires the geometry file.</li>
+  </ul>
+  <p>The result is that the dashboard's tier-1 (metro-adjacent) designation uses true coordinates, not ANC approximations. The pipeline's <code>metro_adjacent</code> flag (ANC-based) is an acceptable proxy for envelope computation — the 0.5-mile threshold is much larger than the ANC centroid error (~0.1 miles).</p>
+
+  <div class="code-block">
+    <details>
+      <summary><span>land_cost fallback chain</span> <span class="fn-file">merge.py</span></summary>
+<pre><code class="language-python"># Three-tier land cost fallback:
+# 1. Parcel's own assessed land value per SF
+# 2. Neighborhood median (same broad use class)
+# 3. Ward-level median → $50/SF citywide default
+
+df["land_cost_psf"] = (
+    df["assessed_land_psf"]
+    .fillna(df["nbhd_land_psf_median"])
+    .fillna(df["ward_land_psf_median"])
+    .fillna(50.0)   # city-wide fallback $50/SF
+)
+df["land_cost"] = df["land_cost_psf"] * df["lot_area_sf"]</code></pre>
+    </details>
+  </div>
+</section>
+
+<!-- ── SECTION: Step 2 ────────────────────────────────────────────────── -->
+<section class="section" id="step2">
+  <h2>Step 2 — The Development Envelope</h2>
+  <p><code>envelope.py</code> answers: what is the maximum building that can legally be built on this parcel? The answer is determined by three constraints, and the binding (most restrictive) one wins.</p>
+
+  <h3>Constraint 1: FAR — Floor Area Ratio</h3>
+  <p>FAR is the ratio of total building floor space to the lot area. A FAR of 3.5 on a 10,000 SF lot allows up to 35,000 SF of total floor space — which might be a 5-story building covering most of the lot, or an 8-story building covering less of it. DC's mixed-use zones range from FAR 1.0 (MU-1, low-density) to 8.0+ (MU-7, high-density transit-oriented). Single-family R zones don't use FAR — they use lot coverage rules (what percentage of the lot the building footprint can cover) combined with a story limit.</p>
+
+  <h3>Constraint 2: Zoning Height Limit</h3>
+  <p>Each zone code also has a maximum building height in feet. For example, MU-3A allows up to 65 feet. This can be more restrictive than FAR on narrow lots — a tall, thin building might hit the FAR limit before the height limit, or hit the height limit before the FAR limit, depending on lot dimensions.</p>
+
+  <h3>Constraint 3: The Height Act of 1910</h3>
+  <p>This is DC's most distinctive constraint. A federal statute — not a city zoning rule — limits building heights across the entire District. The formula is based on the width of the street the building fronts on:</p>
+
+  <div class="callout blue">
+    <strong>Commercial buildings:</strong> Height = street width + 20 ft, maximum 130 ft<br>
+    <strong>Residential buildings:</strong> Height = street width − 10 ft, maximum 90 ft<br>
+    <strong>Pennsylvania Avenue NW:</strong> Special 160 ft exception for certain frontages
+  </div>
+
+  <p>A typical DC side street is 60–70 feet wide, so a commercial building there can be at most 90–110 feet tall (7–9 stories), and a residential building can be at most 50–60 feet (4–5 stories). This is why DC doesn't have the dense mid-rise corridors visible in similarly-sized American cities — the Height Act effectively caps DC's entire residential fabric at 4–5 stories regardless of what the zoning code allows.</p>
+
+  <p>The street widths come from <code>Roadway_Block.csv</code>. When no street width data is available, the model falls back to the statutory maximums (130 ft commercial, 90 ft residential).</p>
+
+  <div class="code-block">
+    <details>
+      <summary><span class="fn-name">height_act_limit()</span> <span class="fn-file">envelope.py</span></summary>
+<pre><code class="language-python">def height_act_limit(street_width_ft, use_type, address=""):
+    """Return Height Act allowable height in feet.
+
+    Commercial: ROW width + 20 ft, max 130 ft.
+    Residential: ROW width − 10 ft, max 90 ft.
+    Pennsylvania Ave NW: 160 ft exception.
+    """
+    penn_ave = address and "PENNSYLVANIA AVE" in str(address).upper()
+
+    if pd.isna(street_width_ft) or street_width_ft <= 0:
+        # No data — fall back to statutory maximums
+        if penn_ave:
+            return 160.0
+        return 130.0 if use_type == "commercial" else 90.0
+
+    if use_type == "commercial":
+        limit = min(street_width_ft + 20, 130.0)
+    else:
+        limit = min(max(street_width_ft - 10, 20.0), 90.0)
+
+    if penn_ave:
+        limit = max(limit, 160.0)
+
+    return limit</code></pre>
+    </details>
+  </div>
+
+  <h3>Construction Type Classification</h3>
+  <p>The effective height limit determines how many stories can be built, which determines the construction type, which determines cost per square foot:</p>
+
+  <div class="assumption-grid">
+    <div class="assumption-card">
+      <div class="label">Type V — Wood Frame</div>
+      <div class="value">$280<span style="font-size:14px;font-weight:400">/SF</span></div>
+      <div class="sub">≤ 4 stories · most common for DC neighborhood infill</div>
+    </div>
+    <div class="assumption-card">
+      <div class="label">Type I Mid-Rise — Podium/Wrap</div>
+      <div class="value">$350<span style="font-size:14px;font-weight:400">/SF</span></div>
+      <div class="sub">5–8 stories · concrete/steel frame required</div>
+    </div>
+    <div class="assumption-card">
+      <div class="label">Type I High-Rise</div>
+      <div class="value">$420<span style="font-size:14px;font-weight:400">/SF</span></div>
+      <div class="sub">9+ stories · full concrete/steel construction</div>
+    </div>
+    <div class="assumption-card">
+      <div class="label">Efficiency Ratio</div>
+      <div class="value">82<span style="font-size:14px;font-weight:400">%</span></div>
+      <div class="sub">Gross floor area → net rentable (hallways, mechanical, etc.)</div>
+    </div>
+  </div>
+
+  <p>Cost sources: RLB Quarterly Cost Report Q4 2025 DC and Cumming Group DC 2026. Type V at $280/SF is at the high end of the DC market range — smaller projects and those without union labor requirements can come in lower.</p>
+
+  <div class="code-block">
+    <details>
+      <summary><span>Envelope computation logic</span> <span class="fn-file">envelope.py</span></summary>
+<pre><code class="language-python"># GFA: compare FAR-constrained vs. height-constrained
+if zoning_far > 0:
+    gfa_by_far = lot_area * zoning_far      # e.g. 10,000 SF × 3.5 = 35,000 SF
+
+effective_height = min(zoning_height_ft, height_act_limit_ft)
+gfa_by_height = buildable_footprint * (effective_height / floor_to_floor_ft)
+
+# The binding constraint produces the smaller (allowable) GFA
+max_gfa = min(gfa_by_far, gfa_by_height)
+
+net_rentable = max_gfa * efficiency_ratio   # 82% of gross
+max_units = net_rentable / avg_unit_sf</code></pre>
+    </details>
+  </div>
+</section>
+
+<!-- ── SECTION: Step 3 ────────────────────────────────────────────────── -->
+<section class="section" id="step3">
+  <h2>Step 3 — Identifying Soft Sites</h2>
+  <p>Not every parcel that <em>could</em> accommodate a larger building <em>will</em> be redeveloped. The soft site filter identifies parcels where the gap between current development and what's allowed is large enough to plausibly motivate redevelopment.</p>
+
+  <div class="callout blue">
+    <strong>Definition:</strong> A parcel is a "soft site" if its existing building's floor area is less than 50% of the maximum floor area zoning allows. A parcel with a 2,000 SF building on a lot that could support a 10,000 SF building is a soft site; a parcel already built to 80% of its allowable density is not.
+  </div>
+
+  <p>The 50% threshold follows NYC's Department of City Planning Reasonable Worst-Case Development Scenario methodology, adapted for DC. In practice, it means: a two-story building on a lot where zoning allows ten stories is a soft site; a building using 8 of those 10 allowed stories is not. A developer must demolish the existing structure and bear the cost and risk of new construction — that decision is only rational when the "upside" from building larger substantially outweighs the current income from the existing building. DC's FAR-based zoning differs meaningfully from NYC's, so this 50% cutoff should be understood as a screening filter rather than a precise threshold.</p>
+
+  <p>A second filter requires that the parcel be large enough to support at least 3 implied apartment units (at the average unit size). This excludes parcels that are technically underbuilt relative to their zoning allowance but are too small to be viable multifamily development candidates from an institutional lending perspective.</p>
+
+  <div class="code-block">
+    <details>
+      <summary><span>Physical soft site filter</span> <span class="fn-file">run.py</span></summary>
+<pre><code class="language-python"># A parcel is a physical soft site if:
+# 1. Privately owned, has a valid street address, non-condo lot
+# 2. Existing GBA < 50% of maximum buildable GFA
+# 3. Net rentable SF ≥ minimum for 3 implied units
+
+min_nr_sf = min_units * avg_unit_sf / efficiency_ratio  # 3,659 SF
+
+candidates["is_physical_soft_site"] = (
+    (candidates["existing_gba"].fillna(0) <
+     soft_threshold * candidates["max_buildable_gfa"].fillna(0))   # &lt; 50%
+    & (candidates["max_buildable_gfa"].fillna(0) > 0)
+    & (candidates["net_rentable_sf"].fillna(0) >= min_nr_sf)
+)</code></pre>
+    </details>
+  </div>
+
+  <p>This physical soft site pool — <strong>4,250 parcels</strong> — is computed once using current baseline zoning and remains stable across all policy scenarios. It represents the set of parcels displayed on the map. When a scenario unlocks additional R-zone parcels for multifamily use, those parcels are colored differently on the map based on their zone eligibility tier, but the underlying pool doesn't change.</p>
+
+  <div class="assumption-grid">
+    <div class="assumption-card">
+      <div class="label">Physical Soft Sites</div>
+      <div class="value">4,250</div>
+      <div class="sub">Scenario-independent pool (map dots)</div>
+    </div>
+    <div class="assumption-card">
+      <div class="label">Breakdown by Tier</div>
+      <div class="value" style="font-size: 15px; line-height: 1.8;">
+        2,558 <span style="font-size:12px; font-weight:400;">current MU/RA zones (tier 0)</span><br>
+        550 <span style="font-size:12px; font-weight:400;">metro R-zones, McDuffie adds (tier 1)</span><br>
+        1,142 <span style="font-size:12px; font-weight:400;">all R-zones, Lewis George adds (tier 2)</span>
+      </div>
+      <div class="sub"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION: Step 4 ────────────────────────────────────────────────── -->
+<section class="section" id="step4">
+  <h2>Step 4 — The Pro-Forma</h2>
+  <p><code>proforma.py</code> asks the fundamental development question: if a developer demolished the existing structure, obtained financing, built the maximum allowable building, and then sold it to an institutional investor, would they earn enough return to justify the risk? This is called a "pro-forma" — a financial model that projects whether a project would <em>pencil</em> (developer shorthand for "the numbers work").</p>
+
+  <p>One constraint that doesn't appear in the pro-forma sliders: rents are market-set. A developer cannot simply charge more per month to make a project work — the market rate for apartments in a given neighborhood is determined by what tenants are willing and able to pay. The pro-forma takes current market rents as given and asks whether the resulting income can support the cost of building.</p>
+
+  <p>The pro-forma has two sides — revenue and costs — and three tests that must all pass.</p>
+
+  <h3>Revenue Side</h3>
+  <p>Revenue is annual apartment rent income, adjusted for vacancies and the requirement to include some affordable units under DC's Inclusionary Zoning (IZ) program.</p>
+
+  <p><strong>Market-rate rents:</strong> Assigned by neighborhood-ward submarket from calibrated rent tables. Ward 7 and 8 submarkets average $1.50–1.90/SF/month; Ward 2 (downtown/Georgetown) averages $3.93/SF/month; the citywide default is $3.65/SF/month for new Class A construction.</p>
+
+  <p><strong>Inclusionary Zoning (IZ):</strong> Buildings with 10 or more units must reserve a share of units as affordable. In the current model:</p>
+  <ul style="margin: 8px 0 12px 24px; line-height: 1.8; font-size: 14px;">
+    <li>Wood-frame Type V: 11% of units at 60% of Area Median Income (AMI)</li>
+    <li>Concrete/steel Type I: 8.3% of units at 60% AMI</li>
+    <li>DC FY2026 four-person AMI: $163,900 → 60% AMI = $98,340/year household income</li>
+    <li>IZ unit rent (for a typical 1,000 SF unit): approximately $2,150/month</li>
+  </ul>
+
+  <p>Note that in low-rent submarkets like Wards 7 and 8, the IZ rent ($2,150/month) can actually exceed the market rent for that neighborhood — affordable units are "more expensive" than market units. This is not a modeling error; it reflects that DC's AMI is anchored to the entire region's income (including suburban Maryland and Virginia), not just DC neighborhoods east of the Anacostia.</p>
+
+  <p><strong>Vacancy:</strong> 6% (standard institutional underwriting assumption).</p>
+
+  <p><strong>Operating expenses:</strong> $8,500 per unit per year (management, maintenance, insurance, reserves — from IREM/NAA DC metro benchmarks).</p>
+
+  <h3>Cost Side</h3>
+  <p>Total Development Cost (TDC) = land + hard cost + soft cost + fees + financing carry + developer fee.</p>
+
+  <div class="assumption-grid">
+    <div class="assumption-card">
+      <div class="label">Hard Cost</div>
+      <div class="value">$280–420<span style="font-size:12px;font-weight:400">/SF</span></div>
+      <div class="sub">Construction cost by building type · +10% contingency</div>
+    </div>
+    <div class="assumption-card">
+      <div class="label">Soft Costs</div>
+      <div class="value">25<span style="font-size:14px;font-weight:400">%</span></div>
+      <div class="sub">Of hard cost · architecture, engineering, legal, permits</div>
+    </div>
+    <div class="assumption-card">
+      <div class="label">DC Water SAF</div>
+      <div class="value">$14,500<span style="font-size:13px;font-weight:400">/unit</span></div>
+      <div class="sub">System Availability Fee · $3,944 credit for affordable units</div>
+    </div>
+    <div class="assumption-card">
+      <div class="label">Construction Loan</div>
+      <div class="value">7.5<span style="font-size:14px;font-weight:400">%</span></div>
+      <div class="sub">65% loan-to-cost · carry charged on average drawn balance</div>
+    </div>
+  </div>
+
+  <p>Soft costs at 25% of hard cost are higher than California defaults (~15–20%) but reflect DC's expensive entitlement process, HPRB review requirements for historic districts, and higher professional services costs in a high-cost urban market.</p>
+
+  <h3>The Three Feasibility Tests</h3>
+  <p>A parcel is "feasible" only if it passes all three tests simultaneously:</p>
+
+  <div class="test-grid">
+    <div class="test-card">
+      <div class="test-badge yoc">YoC</div>
+      <div class="test-content">
+        <div class="test-title">Yield-on-Cost ≥ 6.5%</div>
+        <div class="test-formula">YoC = NOI ÷ Total Development Cost</div>
+        <div class="test-desc">Annual rent income divided by total development cost. The developer needs to earn at least 6.5% — the 5.0% that investors pay for a finished building (the "cap rate," or going-in capitalization rate), plus a 1.5% premium for bearing construction risk. Think of it like a savings account: if a finished apartment building pays you 5% annually on your money, you'd only take the trouble to build one yourself if doing so would pay at least 6.5%. The extra 1.5% is the reward for bearing two or more years of construction risk, cost overruns, and market uncertainty.</div>
+      </div>
+    </div>
+    <div class="test-card">
+      <div class="test-badge roc">RoC</div>
+      <div class="test-content">
+        <div class="test-title">Return on Cost ≥ 6.5%</div>
+        <div class="test-formula">RoC = (Stabilized Value ÷ TDC) − 1</div>
+        <div class="test-desc">The stabilized building value (NOI ÷ going-in cap rate) must exceed total development cost by at least 6.5%. This is a close cousin of YoC but measures the profit margin on cost in appreciation terms rather than income yield.</div>
+      </div>
+    </div>
+    <div class="test-card">
+      <div class="test-badge rlv">RLV</div>
+      <div class="test-content">
+        <div class="test-title">Residual Land Value ≥ Assessed Land Value</div>
+        <div class="test-formula">RLV = Stabilized Value − (TDC − Land Cost)</div>
+        <div class="test-desc">After accounting for all construction costs, the residual value the developer could "afford" to pay for the land must be at least as much as the current owner expects to receive (proxied by assessed land value). If not, the current owner won't sell at a price that makes the project work — the land is worth more as-is than as a development site. Technically: RLV is the amount left over after subtracting all non-land costs from the stabilized building value. This is the most commonly binding constraint in supply-constrained urban markets like DC.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>The Rent-to-Pencil Metric</h3>
+  <p>For infeasible parcels, the model computes a "rent-to-pencil" figure: the minimum monthly rent per square foot at which the project would just clear the YoC threshold, holding all other inputs constant. This is the market rent a developer would need to observe before building pencils — and quantifies the gap between current rents and the rent level required to unlock new construction.</p>
+
+  <div class="code-block">
+    <details>
+      <summary><span class="fn-name">feasibility tests + rent_to_pencil</span> <span class="fn-file">proforma.py</span></summary>
+<pre><code class="language-python"># ── Three return tests ──────────────────────────────────────────────────
+yoc  = noi / tdc
+roc  = stabilized_value / tdc - 1
+rlv  = stabilized_value - (tdc - land_cost)
+
+yoc_ok = yoc  >= exit_cap + yoc_spread   # must beat 5.0% + 1.5% = 6.5%
+roc_ok = roc  >= min_return_on_cost      # must be >= 6.5%
+rlv_ok = rlv  >= assessed_land_value     # must cover what owner expects
+
+feasible = yoc_ok and roc_ok and rlv_ok
+
+# ── Rent-to-pencil: solve backward for the rent that clears YoC ────────
+# Algebra: target_NOI = TDC × (exit_cap + spread)
+# NOI = [(mkt_units × unit_sf × rent* + affrd_units × unit_sf × iz_rent)
+#         × 12 × (1-vacancy)] - opex_total
+# Solve for rent*:
+target_noi = tdc * (exit_cap + yoc_spread)
+opex_total = max_units * opex_per_unit_annual
+
+rent_to_pencil = (
+    (target_noi + opex_total) / ((1 - vacancy) * 12)
+    - affordable_units * unit_sf * iz_rent
+) / (market_units * unit_sf)</code></pre>
+    </details>
+  </div>
+
+  <h3>Social Housing Track (Lewis George — Pipeline Only)</h3>
+  <div class="callout orange" style="margin-bottom: 12px;">
+    <strong>Dashboard status:</strong> The social housing pro-forma is implemented in the Python pipeline (<code>proforma.py</code>) but is <em>not currently shown in the dashboard</em>. <code>soft_sites.json</code> contains only privately-owned parcels — public land is excluded at export time. The dashboard's JavaScript pro-forma engine models private market-rate development only.
+  </div>
+  <p>Under the Lewis George scenario, the pipeline runs a parallel social housing pro-forma for publicly-owned parcels with fundamentally different economics:</p>
+  <ul style="margin: 8px 0 12px 24px; line-height: 1.8; font-size: 14px;">
+    <li><strong>Land cost = $0</strong> (public land conveyed to the housing entity)</li>
+    <li><strong>Required yield = 4.5%</strong> (cost of tax-exempt bond financing, vs. 6.5% for private)</li>
+    <li><strong>Blended affordable rent</strong> across AMI tiers (30%/50%/80%/120% AMI mix)</li>
+    <li><strong>No IZ set-aside</strong> (all units are affordable by definition)</li>
+  </ul>
+  <p>The $0 land cost and 4.5% yield requirement substantially change the math — many sites that are infeasible for private development become viable for social housing. This analysis exists in the pipeline output parquets but would require a separate dashboard layer to display.</p>
+</section>
+
+<!-- ── SECTION: Scenarios ──────────────────────────────────────────────── -->
+<section class="section" id="scenarios">
+  <h2>Policy Scenarios</h2>
+  <p>Each scenario is a set of parameter overrides applied on top of the baseline assumptions. The model tests three:</p>
+
+  <table class="scenario-table">
+    <thead>
+      <tr>
+        <th>Parameter</th>
+        <th>Baseline</th>
+        <th>Lewis George</th>
+        <th>McDuffie</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Zone eligibility</strong></td>
+        <td>MU, RA, CG zones only</td>
+        <td class="highlight">All zones (R-zones unlocked)</td>
+        <td>MU/RA + metro-adjacent R-zones</td>
+      </tr>
+      <tr>
+        <td><strong>Height Act</strong></td>
+        <td>Current formula</td>
+        <td class="highlight">+20% cap for affordable projects</td>
+        <td>Commercial max (130 ft) within 0.5 mi Metro</td>
+      </tr>
+      <tr>
+        <td><strong>IZ set-asides</strong></td>
+        <td>11% / 8.3%</td>
+        <td class="highlight">15% / 13% (higher)</td>
+        <td>No change</td>
+      </tr>
+      <tr>
+        <td><strong>Social housing</strong></td>
+        <td>Not modeled</td>
+        <td class="highlight">Enabled in pipeline<br><span style="font-weight:400;font-size:11px;color:#6b7280">(not in dashboard)</span></td>
+        <td>Not modeled</td>
+      </tr>
+      <tr>
+        <td><strong>TOPA</strong></td>
+        <td>Baseline</td>
+        <td>+4 months friction, +30 bps exit cap</td>
+        <td>No change from baseline</td>
+      </tr>
+      <tr>
+        <td><strong>Entitlement time</strong></td>
+        <td>3 months by-right</td>
+        <td>No change</td>
+        <td class="highlight">50% faster (1.5 months by-right)</td>
+      </tr>
+      <tr>
+        <td><strong>Zone-eligible soft sites (dashboard)</strong></td>
+        <td class="num">2,558</td>
+        <td class="num highlight">4,250</td>
+        <td class="num">3,108</td>
+      </tr>
+      <tr>
+        <td><strong>Feasible parcels (private)</strong></td>
+        <td class="num">0</td>
+        <td class="num">0</td>
+        <td class="num">0</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout orange">
+    <strong>Important framing note:</strong> The model does not assume that either candidate's platform would make development feasible, and does not validate or invalidate stated production goals. It shows the physical and financial constraints that apply regardless of policy. Increasing zone eligibility (Lewis George) and reducing entitlement time (McDuffie) are real improvements — but neither overcomes the fundamental arithmetic that construction costs at $280–420/SF cannot be recovered at rents of $1.50–3.20/SF in most DC neighborhoods. "By-right" approval — meaning a developer can build without a public hearing or discretionary vote — speeds entitlement but does not change the economics once the building is approved.
+  </div>
+
+  <div class="code-block">
+    <details>
+      <summary><span>Scenario overrides (both platforms)</span> <span class="fn-file">policy.py</span></summary>
+<pre><code class="language-python">LEWIS_GEORGE = {
+    "districtwide_6unit_byright": True,    # all R-zones become eligible
+    "height_act_amendment": "affordable_only",  # +20% cap
+    "iz_setaside_wood_pct": 0.15,          # up from 0.11
+    "iz_setaside_concrete_pct": 0.13,      # up from 0.083
+    "social_housing_enabled": True,
+    "topa_friction_months": 4,
+    "topa_exit_cap_premium": 0.003,        # 30 bps risk premium
+}
+
+MCDUFFIE = {
+    "height_act_amendment": "metro_half_mile",  # 130 ft near Metro
+    "entitlement_months_reduction": 0.50,  # 50% faster approval
+    "social_housing_enabled": False,
+    "topa_friction_months": 0,
+    "topa_exit_cap_premium": 0.0,
+}</code></pre>
+    </details>
+  </div>
+</section>
+
+<!-- ── SECTION: Finding ───────────────────────────────────────────────── -->
+<section class="section" id="finding">
+  <h2>The Core Finding: The Rent Gap</h2>
+
+  <div class="callout orange">
+    <strong>Across all 4,250 soft sites under all three scenarios, zero private-market parcels pass the feasibility tests.</strong> That is not a modeling assumption — it is what the construction-cost and rent math produces when current market conditions are held constant. The model does not presume development is impossible; it quantifies how far the current market is from feasibility.
+  </div>
+
+  <p>The fundamental problem is that the rent-to-pencil threshold (the rent required to make construction financially viable) is roughly 2–3× higher than actual market rents in the neighborhoods where the most developable land sits.</p>
+
+  <div class="rent-gap-visual">
+    <h3>Actual Rent vs. Rent Needed to Build (by Ward)</h3>
+    <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 16px;">Monthly rent per square foot. Blue = actual submarket rent. Red = approximate rent-to-pencil threshold for a typical soft site. The gap must close before private construction pencils.</p>
+
+    <!-- Ward 7/8 -->
+    <div class="market-row">
+      <div class="market-name">
+        <span>Wards 7 & 8 — East of Anacostia</span>
+        <span style="color: var(--orange); font-size: 12px;">~4× gap</span>
+      </div>
+      <div class="market-bar-wrap" style="position:relative;">
+        <div class="bar-actual" style="width: 24%; background: #3b82f6;">
+          <span>$1.60/SF</span>
+        </div>
+        <div class="bar-gap-fill" style="width: 76%;"></div>
+        <div style="position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:10.5px; font-weight:600; color:#7f1d1d;">need ~$6/SF</div>
+      </div>
+    </div>
+
+    <!-- Ward 5/6 -->
+    <div class="market-row">
+      <div class="market-name">
+        <span>Wards 5 & 6 — Northeast / Southeast corridors</span>
+        <span style="color: var(--orange); font-size: 12px;">~2× gap</span>
+      </div>
+      <div class="market-bar-wrap" style="position:relative;">
+        <div class="bar-actual" style="width: 40%; background: #3b82f6;">
+          <span>$2.20/SF</span>
+        </div>
+        <div class="bar-gap-fill" style="width: 60%;"></div>
+        <div style="position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:10.5px; font-weight:600; color:#7f1d1d;">need ~$5/SF</div>
+      </div>
+    </div>
+
+    <!-- Ward 2 -->
+    <div class="market-row">
+      <div class="market-name">
+        <span>Ward 2 — Downtown / Georgetown</span>
+        <span style="color: var(--orange); font-size: 12px;">~1.4× gap</span>
+      </div>
+      <div class="market-bar-wrap" style="position:relative;">
+        <div class="bar-actual" style="width: 72%; background: #3b82f6;">
+          <span>$3.93/SF</span>
+        </div>
+        <div class="bar-gap-fill" style="width: 28%;"></div>
+        <div style="position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:10.5px; font-weight:600; color:#7f1d1d;">~$5.40/SF</div>
+      </div>
+    </div>
+    <p style="font-size: 11.5px; color: var(--gray-500); margin-top: 12px; margin-bottom: 0;">Note: Rent-to-pencil varies by parcel (lot size, construction type, land cost). The figures above are representative for typical soft site parcels in each ward. Ward 2 gets closest but still fails — primarily because the Height Act limits buildings to 6–8 stories on most DC streets, spreading high construction costs across fewer units than comparable cities.</p>
+  </div>
+
+  <p>Why is Ward 2 still infeasible despite the highest rents? The Height Act. On a typical 60-foot-wide DC street, the Height Act limits commercial buildings to 80 feet (about 6 stories). A 6-story building on a mid-sized lot doesn't generate enough units to spread the land cost, construction cost, and fee burden across. In Philadelphia or Chicago, the same lot at 15 stories generates 2.5× as many units to absorb those fixed costs.</p>
+
+  <h3>What Would It Take to Make Development Pencil?</h3>
+  <p>Because the model quantifies the gap rather than just labeling sites infeasible, it can answer this question directly. For a typical DC soft site to pass the YoC threshold, roughly one of the following changes would need to occur in isolation — or some combination in concert:</p>
+
+  <div class="callout blue">
+    <strong>Required changes to unlock feasibility (approximate, per typical soft site):</strong><br><br>
+    • <strong>Rents rise 2–3×</strong> from current levels (e.g., Ward 7 from $1.60 to $4–5/SF) — unlikely without major regional income growth or severe supply restriction<br>
+    • <strong>Construction costs fall ~30–40%</strong> — would require materials deflation and productivity gains well beyond current trends<br>
+    • <strong>Land values drop 50–70%</strong> — possible only through economic distress, city land write-downs, or upzoning-induced reassessment<br>
+    • <strong>Subsidies bridge the gap</strong> — e.g., a city land write-down program, tax abatements, or low-income housing tax credits covering 30–50% of development cost<br>
+    • <strong>Height Act relief of 50%+</strong> (to 130–180 ft across the city) — would double or triple unit counts on the same land, distributing fixed costs over more apartments
+  </div>
+  <p>The dashboard's sliders allow direct sensitivity testing of these levers. No single adjustment in the plausible range produces feasibility; combinations (e.g., land write-downs + rent growth + Height Act reform) can close the gap in higher-rent submarkets.</p>
+</section>
+
+<!-- ── SECTION: Examples ──────────────────────────────────────────────── -->
+<section class="section" id="examples">
+  <h2>Example Parcels</h2>
+  <p>These four illustrative examples show how the model's logic plays out across different DC market contexts. Numbers are representative of actual model outputs for similar parcels.</p>
+
+  <div class="example-grid">
+
+    <!-- Example 1: Ward 7 -->
+    <div class="example-card">
+      <div class="example-header">
+        <div>
+          <div class="ex-title">Benning Road Corridor — Ward 7</div>
+          <div class="ex-meta">Zone: MU-3A · 5,000 SF lot · Current rent: $1.88/SF/month · All scenarios</div>
+        </div>
+        <span class="ex-badge infeasible">Infeasible — All Scenarios</span>
+      </div>
+      <div class="example-body">
+        <div class="ex-stat-row">
+          <div class="ex-stat"><div class="s-label">Max Building</div><div class="s-val">17,500 SF · 5 stories</div></div>
+          <div class="ex-stat"><div class="s-label">Construction Type</div><div class="s-val">Type I mid-rise ($350/SF)</div></div>
+          <div class="ex-stat"><div class="s-label">Implied Units</div><div class="s-val">~18 apartments</div></div>
+          <div class="ex-stat"><div class="s-label">Binding Constraint</div><div class="s-val">Zoning height (65 ft)</div></div>
+        </div>
+
+        <div class="rent-gap">
+          <div class="rg-label">
+            <span>Rent gap to pencil</span>
+            <span style="color: var(--orange)">Gap: 2.8×</span>
+          </div>
+          <div class="rg-bar-wrap">
+            <div class="rg-actual" style="width: 36%"><span>$1.88/SF actual</span></div>
+            <div class="rg-gap" style="width: 64%"><span>need $5.19/SF</span></div>
+          </div>
+          <div class="rg-caption">Market rent would need to be $5.19/SF — 2.8× current rates — to make a new apartment building viable here.</div>
+        </div>
+
+        <details class="pf-details">
+          <summary>Show pro-forma math</summary>
+          <div class="pf-grid">
+            <div class="pf-col">
+              <h4>Revenue</h4>
+              <div class="pf-row"><span class="pf-key">Market units (16.5 @ $1.88/SF)</span><span class="pf-val">$298k/yr</span></div>
+              <div class="pf-row"><span class="pf-key">IZ units (1.5 @ $2.69/SF)</span><span class="pf-val">$39k/yr</span></div>
+              <div class="pf-row"><span class="pf-key">Vacancy (6%)</span><span class="pf-val">−$20k/yr</span></div>
+              <div class="pf-row"><span class="pf-key">Operating expenses</span><span class="pf-val">−$153k/yr</span></div>
+              <div class="pf-row"><span class="pf-key"><strong>NOI</strong></span><span class="pf-val blue">$164k/yr</span></div>
+              <div class="pf-row"><span class="pf-key">Stabilized value (÷4.75%)</span><span class="pf-val">$3.45M</span></div>
+            </div>
+            <div class="pf-col">
+              <h4>Costs</h4>
+              <div class="pf-row"><span class="pf-key">Land</span><span class="pf-val">$600k</span></div>
+              <div class="pf-row"><span class="pf-key">Hard cost ($350/SF + 10%)</span><span class="pf-val">$6.74M</span></div>
+              <div class="pf-row"><span class="pf-key">Soft costs (25%)</span><span class="pf-val">$1.68M</span></div>
+              <div class="pf-row"><span class="pf-key">DC fees (SAF + DOB)</span><span class="pf-val">$336k</span></div>
+              <div class="pf-row"><span class="pf-key">Financing carry</span><span class="pf-val">$431k</span></div>
+              <div class="pf-row"><span class="pf-key"><strong>Total Dev Cost</strong></span><span class="pf-val red">$10.1M</span></div>
+            </div>
+            <div class="pf-verdict">
+              <strong>Result: Infeasible (YoC = 1.6%, need 6.5%)</strong><br>
+              A project here earns 1.6 cents per dollar invested annually. Investors require 6.5 cents. The stabilized building is worth $3.45M but costs $10.1M to create — a 66% loss. Even Lewis George's Height Act waiver (+20%) and zone unlocking don't change the rental income: the problem is rents, not rules.
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- Example 2: Ward 6 H Street -->
+    <div class="example-card">
+      <div class="example-header">
+        <div>
+          <div class="ex-title">H Street / Union Market Corridor — Ward 6</div>
+          <div class="ex-meta">Zone: MU-7 · 8,000 SF lot · Current rent: $3.20/SF/month · All scenarios</div>
+        </div>
+        <span class="ex-badge infeasible">Infeasible — Height Act Binds</span>
+      </div>
+      <div class="example-body">
+        <div class="ex-stat-row">
+          <div class="ex-stat"><div class="s-label">FAR Allowance</div><div class="s-val">64,000 SF (FAR 8.0)</div></div>
+          <div class="ex-stat"><div class="s-label">Height Act Limit</div><div class="s-val">80 ft on 60-ft street</div></div>
+          <div class="ex-stat"><div class="s-label">Actual Max Building</div><div class="s-val">40,000 SF · 6 stories</div></div>
+          <div class="ex-stat"><div class="s-label">Binding Constraint</div><div class="s-val">Height Act (not FAR)</div></div>
+        </div>
+
+        <div class="rent-gap">
+          <div class="rg-label">
+            <span>Rent gap to pencil</span>
+            <span style="color: var(--orange)">Gap: 1.7×</span>
+          </div>
+          <div class="rg-bar-wrap">
+            <div class="rg-actual" style="width: 59%"><span>$3.20/SF actual</span></div>
+            <div class="rg-gap" style="width: 41%"><span>need $5.38/SF</span></div>
+          </div>
+          <div class="rg-caption">This is DC's best-case scenario for private development — high rents, good zoning. Still doesn't pencil because the Height Act caps this building at 6 stories, leaving 60% of FAR potential unused and spreading the $4M land cost across too few units.</div>
+        </div>
+
+        <details class="pf-details">
+          <summary>Show pro-forma math</summary>
+          <div class="pf-grid">
+            <div class="pf-col">
+              <h4>Revenue</h4>
+              <div class="pf-row"><span class="pf-key">Market units (50 @ $3.20/SF)</span><span class="pf-val">$1.55M/yr</span></div>
+              <div class="pf-row"><span class="pf-key">IZ units (5 @ $2.69/SF)</span><span class="pf-val">$119k/yr</span></div>
+              <div class="pf-row"><span class="pf-key">Vacancy + OpEx</span><span class="pf-val">−$569k/yr</span></div>
+              <div class="pf-row"><span class="pf-key"><strong>NOI</strong></span><span class="pf-val blue">$1.10M/yr</span></div>
+              <div class="pf-row"><span class="pf-key">Stabilized value</span><span class="pf-val">$23.2M</span></div>
+            </div>
+            <div class="pf-col">
+              <h4>Costs</h4>
+              <div class="pf-row"><span class="pf-key">Land (H Street corridor)</span><span class="pf-val">$3.2M</span></div>
+              <div class="pf-row"><span class="pf-key">Hard cost ($350/SF + 10%)</span><span class="pf-val">$20.5M</span></div>
+              <div class="pf-row"><span class="pf-key">Soft costs + fees + carry</span><span class="pf-val">$8.3M</span></div>
+              <div class="pf-row"><span class="pf-key"><strong>Total Dev Cost</strong></span><span class="pf-val red">$32.0M</span></div>
+            </div>
+            <div class="pf-verdict">
+              <strong>Result: Infeasible (YoC = 3.4%, need 6.5%)</strong><br>
+              Best rents in the analysis area, but the Height Act limits this 8.0 FAR lot to 6 stories. A Chicago developer could build 15 stories on the same lot, generating 2.5× the units to absorb the same construction cost. DC's Height Act effectively imposes a development tax on every site in the city.
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- Example 3: McDuffie R-zone -->
+    <div class="example-card">
+      <div class="example-header">
+        <div>
+          <div class="ex-title">R-2 Parcel Near Rhode Island Ave Metro — Ward 5</div>
+          <div class="ex-meta">Zone: R-2 · 6,000 SF lot · 0.3 miles from station · McDuffie scenario</div>
+        </div>
+        <span class="ex-badge eligible">Newly Eligible (McDuffie)</span>
+      </div>
+      <div class="example-body">
+        <div class="ex-stat-row">
+          <div class="ex-stat"><div class="s-label">Under Baseline</div><div class="s-val">Ineligible (R-zone)</div></div>
+          <div class="ex-stat"><div class="s-label">Under McDuffie</div><div class="s-val">Eligible + Height Act 130 ft</div></div>
+          <div class="ex-stat"><div class="s-label">Max Building</div><div class="s-val">~21 units · 10 stories</div></div>
+          <div class="ex-stat"><div class="s-label">Current Rent (Ward 5)</div><div class="s-val">$2.20/SF</div></div>
+        </div>
+
+        <div class="callout blue" style="margin: 12px 0;">
+          <strong>What McDuffie unlocks:</strong> Under current rules, this R-2 zoned parcel cannot legally have multifamily apartments. McDuffie's near-Metro upzoning makes it eligible — and raises the Height Act ceiling to 130 ft (the commercial maximum). This is a real policy improvement that physically expands the development pipeline by 550 parcels within the physical soft site pool.
+        </div>
+
+        <details class="pf-details">
+          <summary>Show pro-forma math</summary>
+          <div class="pf-grid">
+            <div class="pf-col">
+              <h4>Envelope (McDuffie)</h4>
+              <div class="pf-row"><span class="pf-key">Lot coverage (40%)</span><span class="pf-val">2,400 SF footprint</span></div>
+              <div class="pf-row"><span class="pf-key">Height Act (130 ft)</span><span class="pf-val">~10 stories</span></div>
+              <div class="pf-row"><span class="pf-key">Gross floor area</span><span class="pf-val">24,000 SF</span></div>
+              <div class="pf-row"><span class="pf-key">Net rentable (82%)</span><span class="pf-val">19,680 SF</span></div>
+              <div class="pf-row"><span class="pf-key">Units at 700 SF/unit</span><span class="pf-val">~28 units</span></div>
+            </div>
+            <div class="pf-col">
+              <h4>Pro-Forma Result</h4>
+              <div class="pf-row"><span class="pf-key">NOI</span><span class="pf-val">~$305k</span></div>
+              <div class="pf-row"><span class="pf-key">Stabilized value</span><span class="pf-val">~$6.4M</span></div>
+              <div class="pf-row"><span class="pf-key">Total dev cost</span><span class="pf-val">~$15.8M</span></div>
+              <div class="pf-row"><span class="pf-key">YoC</span><span class="pf-val red">1.9%</span></div>
+            </div>
+            <div class="pf-verdict">
+              <strong>Result: Newly eligible, still infeasible (YoC = 1.9%)</strong><br>
+              McDuffie's policy correctly targets the parcels most likely to develop — near transit, with higher height allowances. But Ward 5 rents ($2.20/SF) are still far below the ~$5/SF needed. The policy improvement is real; the financial gap remains.
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- Example 4: Social housing (pipeline only) -->
+    <div class="example-card">
+      <div class="example-header">
+        <div>
+          <div class="ex-title">DC-Owned Land Near Anacostia Metro — Ward 8</div>
+          <div class="ex-meta">Owner: District of Columbia · Zone: MU-2 · Lewis George — Python pipeline analysis only</div>
+        </div>
+        <span class="ex-badge eligible" style="background:#f0fdf4;color:#15803d;">Pipeline: Feasible (not in dashboard)</span>
+      </div>
+      <div class="example-body">
+        <div class="ex-stat-row">
+          <div class="ex-stat"><div class="s-label">Dashboard?</div><div class="s-val">Not shown — public land excluded</div></div>
+          <div class="ex-stat"><div class="s-label">Social Housing Land Cost</div><div class="s-val">$0</div></div>
+          <div class="ex-stat"><div class="s-label">Required Yield (pipeline)</div><div class="s-val">4.5% (tax-exempt bonds)</div></div>
+          <div class="ex-stat"><div class="s-label">Rent Mix (AMI-blended)</div><div class="s-val">30%–120% AMI units</div></div>
+        </div>
+
+        <div class="callout orange" style="margin: 12px 0;">
+          <strong>Dashboard limitation:</strong> Public and government-owned parcels are excluded from <code>soft_sites.json</code>. The dashboard only models private market-rate development. The social housing pro-forma below is from the Python pipeline's <code>run_social_housing_proforma()</code> function — it exists in the pipeline outputs but is not yet surfaced in the interactive tool.
+        </div>
+
+        <div class="callout green" style="margin: 12px 0;">
+          <strong>The social housing arithmetic (pipeline):</strong> Land at $0 (instead of $500k–2M) eliminates the single largest obstacle to development in DC. Combined with a lower required return (4.5% vs 6.5%), and publicly-backed financing at tax-exempt rates, projects that are deeply infeasible for private developers become viable as social housing.
+        </div>
+
+        <details class="pf-details">
+          <summary>Show pro-forma math (from Python pipeline)</summary>
+          <div class="pf-grid">
+            <div class="pf-col">
+              <h4>Social Housing Revenue</h4>
+              <div class="pf-row"><span class="pf-key">30% AMI units (15% of building)</span><span class="pf-val">$0.74/SF</span></div>
+              <div class="pf-row"><span class="pf-key">50% AMI units (30% of building)</span><span class="pf-val">$1.24/SF</span></div>
+              <div class="pf-row"><span class="pf-key">80% AMI units (35% of building)</span><span class="pf-val">$1.98/SF</span></div>
+              <div class="pf-row"><span class="pf-key">120% AMI units (20% of building)</span><span class="pf-val">$2.97/SF</span></div>
+              <div class="pf-row"><span class="pf-key"><strong>Blended NOI (example site)</strong></span><span class="pf-val blue">~$155k</span></div>
+            </div>
+            <div class="pf-col">
+              <h4>Social Housing Costs</h4>
+              <div class="pf-row"><span class="pf-key">Land cost</span><span class="pf-val green">$0</span></div>
+              <div class="pf-row"><span class="pf-key">Construction + soft + fees</span><span class="pf-val">$7.8M</span></div>
+              <div class="pf-row"><span class="pf-key">Total dev cost</span><span class="pf-val">$7.8M</span></div>
+              <div class="pf-row"><span class="pf-key">Required yield</span><span class="pf-val">4.5%</span></div>
+              <div class="pf-row"><span class="pf-key">Actual YoC</span><span class="pf-val green">~5.1%</span></div>
+            </div>
+            <div class="pf-verdict green-v">
+              <strong>Pipeline result: Feasible under social housing model</strong><br>
+              $0 land cost reduces TDC by ~40% vs. private acquisition. The lower required yield (4.5% vs 6.5%) further expands the feasible set. This illustrates the economic logic of Lewis George's Dignified Homes DC program: sites economically impossible for private developers can be viable when publicly owned and publicly financed — but this track is not yet displayed in the dashboard.
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── SECTION: Limitations ───────────────────────────────────────────── -->
+<section class="section" id="limitations">
+  <h2>Known Limitations</h2>
+  <p>Every model involves simplifications. The following are the most material limitations of this analysis:</p>
+
+  <ul class="limitation-list">
+    <li><strong>Front setbacks not modeled.</strong> The Zoning Development Standards dataset provides no front setback data. The buildable footprint is modestly overstated for parcels with front setback requirements.</li>
+    <li><strong>Single efficiency ratio (82%).</strong> The GFA-to-net-rentable conversion should vary by building type: approximately 88% for Type V wood-frame, 82% for Type I mid-rise, 76% for Type I high-rise. Using a uniform 82% slightly overstates unit counts for Type V (favorable) and understates them for Type I high-rise (unfavorable). This is not material to the binary feasibility finding.</li>
+    <li><strong>DC Water SAF approximation.</strong> The System Availability Fee is actually based on meter size, not unit count. The per-unit equivalent varies significantly by project scale. The $14,500/unit figure is a simplified average from DC Water's fee schedule. The slider in the dashboard allows sensitivity testing.</li>
+    <li><strong>Land cost mostly from assessed values.</strong> Only 27.5% of eligible parcels have post-2022 sales data. Assessed values are generally lower than market values in DC, particularly in rapidly appreciating neighborhoods. This means the RLV test threshold (assessed land value) may be set too low, making parcels appear closer to feasibility than they are.</li>
+    <li><strong>Parking costs not explicitly modeled.</strong> The model doesn't separately model parking construction. Lewis George's elimination of parking minimums is flagged in the scenario but has no direct cost effect because parking wasn't separately estimated.</li>
+    <li><strong>No property tax modeling.</strong> DC PILOT (Payment in Lieu of Taxes) programs reduce operating costs for affordable projects. Not currently modeled.</li>
+    <li><strong>Social housing not in dashboard.</strong> The Python pipeline includes a full social housing pro-forma for publicly-owned parcels under the Lewis George scenario, but <code>soft_sites.json</code> is limited to privately-owned parcels. Public land parcels are excluded from the map and from all dashboard statistics. Displaying social housing would require a separate JSON export and a parallel JavaScript pro-forma track.</li>
+    <li><strong>Static rent assumption.</strong> The model uses current rents and does not forecast rent appreciation. A developer who believes rents will rise 20% over 5 years might build today even if the model shows infeasibility at current rents.</li>
+    <li><strong>R-zone envelope approximation.</strong> R-zone parcels use lot coverage and story limits rather than FAR. The model approximates their envelopes using lot coverage × floor-to-floor height. More precise modeling would require parcel-specific surveys.</li>
+    <li><strong>Construction costs are conservative (low).</strong> The model's hard cost figures ($280/SF Type V, $350/SF mid-rise, $420/SF high-rise) are at the lower end of what DC-area practitioners report in 2025–2026. Current estimates from industry sources run $375–$425/SF for podium mid-rise and $450–$500/SF for high-rise, reflecting ongoing materials cost inflation. If costs are understated by 10–15%, the rent gap widens further — making the zero-feasibility finding more robust, not less.</li>
+    <li><strong>Height Act residential formula approximation.</strong> The model uses <code>max(street_width − 10, 20)</code> as a floor for residential height calculations on very narrow streets. This is a reasonable interpretation but is not explicitly grounded in the statute's narrow-street provisions (DC Code § 6-601.05). This is unlikely to affect more than a small number of parcels on atypical streets.</li>
+    <li><strong>Cap rate convention.</strong> Stabilized value uses the going-in cap rate (4.75%); the YoC threshold tests against exit cap + 150 bps spread (6.50%). This follows standard DC developer underwriting (CBRE Q1 2025). Because stabilized value is computed at the lower (more generous) cap, the return-on-cost test (≥6.5%) is structurally slacker than the YoC test under current calibration — YoC is the binding hurdle in practice. A reviewer who prefers a single-cap convention would tighten value modestly and still find zero feasibility.</li>
+    <li><strong>Property tax treatment in OpEx.</strong> Operating expenses ($8,500/unit/yr) are reported on the IREM/NAA benchmark basis; some sub-benchmarks include real estate taxes and some do not. DC Class 2 multifamily property tax (~$0.85 per $100 of assessed value) runs roughly $3,000–4,500/unit/yr on stabilized assets. If the model's OpEx underweights property tax, NOI is overstated by 15–25% — which would only deepen the zero-feasibility finding, not reverse it. PILOT and IZ tax-exclusion programs are also not modeled.</li>
+    <li><strong>Loan-to-cost basis.</strong> Construction debt is sized at 65% of (hard + soft) cost rather than 65% of TDC. This understates debt and the resulting carry interest by roughly 10–15%. Correcting this convention raises TDC modestly and makes feasibility marginally harder to clear.</li>
+    <li><strong>Static pro-forma; no rent or cost trending.</strong> The pro-forma uses today's rents and today's costs. Industry underwriting typically trends rents 2–3%/yr and costs 3–4%/yr over a 24–30 month construction window. Trending would lift NOI at delivery by ~5–8% and raise TDC by ~7–10%, with offsetting effects. We use static inputs because trending assumptions are themselves contested; the dashboard's sliders allow direct sensitivity testing of rent and cost levels.</li>
+    <li><strong>IZ rent simplification.</strong> Affordable rent is computed using a 2.5-person household (≈ 0.875 × 4-person AMI) at 30% of income. The DHCD IZ Maximum Rent Schedule actually sets per-unit rents based on bedroom count + 1 household members, with utility allowance deductions. The flat 2.5-person convention introduces a small per-unit rent error (under 5%), partially offset by the omitted utility-allowance deduction.</li>
+    <li><strong>No backtest against actual DC completions.</strong> The model has not been retroactively run on 2018–2020 inputs to test whether it would have flagged the ~5,000 units delivered during 2022–2024 as borderline-feasible. Backtest is a known v2 enhancement. Current results should be read as a structural feasibility statement at 2026 inputs, not a calibrated forecast.</li>
+  </ul>
+</section>
+
+<!-- Spacer -->
+<div style="height: 40px;"></div>
+<hr style="border: none; border-top: 1px solid var(--gray-200); margin-bottom: 32px;">
+<p style="font-size: 12.5px; color: var(--gray-400); max-width: var(--content-max);">
+  DC Housing Feasibility Simulator · Methodology documentation for pipeline v2 / dashboard v3 · April 2026 ·
+  Model adapted from Terner Center for Housing Innovation methodology ·
+  <a href="index.html" style="color: var(--blue); text-decoration: none;">Return to Dashboard →</a>
+</p>
+
+</main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+
+<script>
+// Active sidebar nav on scroll
+const sections = document.querySelectorAll('.section[id]');
+const links = document.querySelectorAll('#sidebar nav a');
+
+const observer = new IntersectionObserver(
+  entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.getAttribute('id');
+        links.forEach(l => {
+          l.classList.toggle('active', l.getAttribute('href') === '#' + id);
+        });
+      }
+    });
+  },
+  { rootMargin: '-20% 0px -70% 0px', threshold: 0 }
+);
+sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

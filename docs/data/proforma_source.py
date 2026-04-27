@@ -2,7 +2,7 @@
 proforma.py — Pro-forma analysis for one parcel.
 
 Computes revenue, costs, and three feasibility thresholds:
-  1. Yield-on-cost ≥ exit cap rate + spread (default 125 bps)
+  1. Yield-on-cost ≥ exit cap rate + spread (default 150 bps)
   2. Untrended return on cost ≥ min_roc (default 6.5%)
   3. Residual land value ≥ assessed land value
 
@@ -12,6 +12,24 @@ Also runs a social housing variant (parallel track, Lewis George scenario).
 import math
 import numpy as np
 import pandas as pd
+
+_HARD_COST_KEY = {
+    "type_v":     "hard_cost_type_v_per_sf",
+    "type_i_mid": "hard_cost_type_i_mid_per_sf",
+    "type_i":     "hard_cost_type_i_per_sf",
+}
+
+_UNIT_SF_KEY = {
+    "type_v":     "avg_unit_sf_type_v",
+    "type_i_mid": "avg_unit_sf_type_i_mid",
+    "type_i":     "avg_unit_sf_type_i",
+}
+
+# Construction-type ordering and per-type story ceilings (matches envelope.construction_type:
+# Type V ≤ 4 stories, Type I-mid ≤ 8 stories, Type I unbounded).
+_CT_BY_INDEX = ["type_v", "type_i_mid", "type_i"]
+_CT_TO_INDEX = {ct: i for i, ct in enumerate(_CT_BY_INDEX)}
+_TYPE_STORY_CAPS = [4, 8, float("inf")]
 
 
 # ── IZ rent calculation ───────────────────────────────────────────────────────
@@ -62,28 +80,100 @@ def construction_months(units: float, stories: float,
 def run_proforma(row: pd.Series, cfg: dict) -> dict:
     """Run a market-rate multifamily rental pro-forma for one parcel.
 
+    Iterates across every construction type the parcel's envelope can support
+    (Type V ≤ 4 stories, Type I-mid ≤ 8, Type I unbounded), runs a full
+    pro-forma at each, and selects by feasibility-then-RLV. Mirrors the
+    dashboard optimizer in docs/index.html — a developer won't build a larger
+    unfinanceable building when a smaller feasible one is available.
+
     Args:
         row: A row from the parcel master with envelope columns already computed.
         cfg: Merged assumptions dict (assumptions.yaml + scenario overrides).
 
     Returns:
-        Dict with feasibility flag, binding constraint, and key financial metrics.
+        Dict with feasibility flag, binding constraint, and key financial metrics
+        for the optimal construction type.
     """
     max_gfa = float(row.get("max_buildable_gfa") or 0)
-    max_units = float(row.get("max_units") or 0)
-    c_type = row.get("construction_type", "type_v")
-    stories = float(row.get("max_buildable_stories") or 0)
-    is_historic = bool(row.get("is_historic", False))
-    lot_area = float(row.get("lot_area_sf") or 0)
-
-    if max_gfa <= 0 or max_units < 1:
+    if max_gfa <= 0:
         return _infeasible("no_envelope")
 
+    max_ct = row.get("construction_type", "type_v")
+    max_ct_idx = _CT_TO_INDEX.get(max_ct, 0)
+
+    footprint = float(row.get("buildable_footprint_sf") or 0)
+    eff_height = float(row.get("effective_height_ft") or 0)
+    floor_to_floor = cfg.get("floor_to_floor_ft", 12)
+
+    best = None
+    best_ct = None
+    for ct_idx in range(max_ct_idx + 1):
+        c_type = _CT_BY_INDEX[ct_idx]
+        # Cap stories at this construction type's ceiling so we don't price
+        # a 6-story building as Type V ($280/SF).
+        cap_stories = min(eff_height / floor_to_floor, _TYPE_STORY_CAPS[ct_idx])
+        if footprint > 0 and cap_stories > 0:
+            gfa_at_ct = min(max_gfa, footprint * cap_stories)
+        else:
+            gfa_at_ct = max_gfa
+        if gfa_at_ct <= 0:
+            continue
+
+        result = _proforma_at_env(row, gfa_at_ct, cap_stories, c_type, cfg)
+        if best is None:
+            best = result
+            best_ct = c_type
+            continue
+        better = (
+            (result["feasible"] and not best["feasible"])
+            or (result["feasible"] == best["feasible"]
+                and _rlv_for_ranking(result) > _rlv_for_ranking(best))
+        )
+        if better:
+            best = result
+            best_ct = c_type
+
+    if best is None:
+        return _infeasible("no_envelope")
+    best["chosen_construction_type"] = best_ct
+    return best
+
+
+def _rlv_for_ranking(result: dict) -> float:
+    """RLV used as the optimizer tiebreaker. NaN/missing → very negative."""
+    rlv = result.get("rlv")
+    if rlv is None:
+        return -1e15
+    try:
+        f = float(rlv)
+    except (TypeError, ValueError):
+        return -1e15
+    if np.isnan(f) or np.isinf(f):
+        return -1e15
+    return f
+
+
+def _proforma_at_env(row: pd.Series, max_gfa: float, stories: float,
+                     c_type: str, cfg: dict) -> dict:
+    """Run a pro-forma at a specific (envelope, construction-type) candidate.
+
+    Always returns finite RLV — even when NOI ≤ 0 (stab_value clamped to 0)
+    so the construction-type optimizer can rank infeasible options.
+    """
+    is_historic = bool(row.get("is_historic", False))
+
+    # Per-type unit size; falls back to legacy avg_unit_sf if new keys absent
+    unit_sf = cfg.get(_UNIT_SF_KEY.get(c_type, "avg_unit_sf_type_v"),
+                      cfg.get("avg_unit_sf", 1000))
+    net_rentable = max_gfa * cfg.get("efficiency_ratio", 0.82)
+    max_units = net_rentable / unit_sf if unit_sf > 0 else 0
+
+    if max_units < 1:
+        return _infeasible("no_units")
+
     # ── Revenue ───────────────────────────────────────────────────────────────
-    # Use parcel-level submarket rent if available; fall back to cfg citywide default.
     _sp = row.get("submarket_rent_psf")
-    rent_psf = float(_sp) if (_sp is not None and _sp == _sp and float(_sp) > 0) else cfg["rent_per_sf_per_month"]
-    unit_sf  = cfg.get("avg_unit_sf", 1000)
+    rent_psf = float(_sp) if (pd.notna(_sp) and float(_sp) > 0) else cfg["rent_per_sf_per_month"]
     vacancy  = cfg.get("vacancy_rate", 0.06)
     opex_pu  = cfg.get("opex_per_unit_annual", 8500)
 
@@ -92,7 +182,7 @@ def run_proforma(row: pd.Series, cfg: dict) -> dict:
     if max_units >= iz_threshold:
         iz_pct = (cfg.get("iz_setaside_wood_pct", 0.11)
                   if c_type == "type_v"
-                  else cfg.get("iz_setaside_concrete_pct", 0.09))
+                  else cfg.get("iz_setaside_concrete_pct", 0.083))
         # Scenario override
         if "iz_setaside_pct" in cfg:
             iz_pct = cfg["iz_setaside_pct"]
@@ -104,7 +194,7 @@ def run_proforma(row: pd.Series, cfg: dict) -> dict:
 
     iz_rent = iz_rent_per_sf(
         cfg.get("iz_ami_tier", 0.60),
-        cfg.get("ami_4person", 142300),
+        cfg.get("ami_4person", 163900),
         unit_sf=unit_sf,
     )
 
@@ -114,29 +204,23 @@ def run_proforma(row: pd.Series, cfg: dict) -> dict:
     noi = egi - max_units * opex_pu
 
     # ── Stabilized value ──────────────────────────────────────────────────────
+    # Clamp at 0 when NOI ≤ 0 so RLV remains finite (rankable by the optimizer).
     going_in_cap = cfg["going_in_cap_rate"]
-    if noi <= 0:
-        return _infeasible("negative_noi")
-    stabilized_value = noi / going_in_cap
+    stabilized_value = noi / going_in_cap if noi > 0 else 0.0
 
     # ── Costs ─────────────────────────────────────────────────────────────────
-    cost_key = {
-        "type_v":     "hard_cost_type_v_per_sf",
-        "type_i_mid": "hard_cost_type_i_mid_per_sf",
-        "type_i":     "hard_cost_type_i_per_sf",
-    }.get(c_type, "hard_cost_type_v_per_sf")
-    hard_cost_psf = cfg[cost_key]
+    hard_cost_psf = cfg[_HARD_COST_KEY.get(c_type, "hard_cost_type_v_per_sf")]
     hard_cost = max_gfa * hard_cost_psf * (1 + cfg.get("contingency_pct", 0.10))
     soft_cost = hard_cost * cfg.get("soft_cost_pct", 0.25)
 
     # DC Water SAF
     water_saf = (
-        max_units * cfg.get("dc_water_saf_per_unit_market", 22580)
+        max_units * cfg.get("dc_water_saf_per_unit_market", 14500)
         - affordable_units * cfg.get("dc_water_saf_credit_affordable", 3944)
     )
     # DOB permit fees
-    dob_fees = hard_cost * cfg.get("dob_permit_pct_of_construction", 0.02) * (
-        1 + cfg.get("dob_permit_surcharge", 0.10)
+    dob_fees = hard_cost * cfg.get("dob_permit_pct_of_construction", 0.008) * (
+        1 + cfg.get("dob_permit_surcharge", 0.50)
     )
     fees = water_saf + dob_fees
 
@@ -172,21 +256,23 @@ def run_proforma(row: pd.Series, cfg: dict) -> dict:
     # TOPA exit cap premium (McDuffie scenario)
     exit_cap += cfg.get("topa_exit_cap_premium", 0.0)
 
-    yoc_spread   = cfg.get("yoc_spread_over_exit_cap", 0.0125)
+    yoc_spread   = cfg.get("yoc_spread_over_exit_cap", 0.015)
     min_roc      = cfg.get("min_return_on_cost", 0.065)
     assessed_lv  = float(row.get("assessed_land_value") or 0)
 
-    yoc           = noi / tdc
-    return_on_cost = stabilized_value / tdc - 1
+    yoc           = noi / tdc if tdc > 0 else 0.0
+    return_on_cost = stabilized_value / tdc - 1 if tdc > 0 else -1.0
     rlv           = stabilized_value - (tdc - land_cost)
 
-    yoc_ok  = yoc >= exit_cap + yoc_spread
-    roc_ok  = return_on_cost >= min_roc
+    yoc_ok  = noi > 0 and yoc >= exit_cap + yoc_spread
+    roc_ok  = noi > 0 and return_on_cost >= min_roc
     rlv_ok  = rlv >= assessed_lv
 
     feasible = yoc_ok and roc_ok and rlv_ok
 
-    if not yoc_ok:
+    if noi <= 0:
+        binding_constraint = "noi"
+    elif not yoc_ok:
         binding_constraint = "yoc"
     elif not roc_ok:
         binding_constraint = "roc"
@@ -202,13 +288,7 @@ def run_proforma(row: pd.Series, cfg: dict) -> dict:
     #         × 12 × (1-vacancy)] - opex_total
     target_noi = tdc * (exit_cap + yoc_spread)
     opex_total = max_units * opex_pu
-    iz_gross = affordable_units * unit_sf * iz_rent * 12 * (1 - vacancy)
     if market_units * unit_sf > 0:
-        rent_to_pencil = (
-            (target_noi + opex_total) / (1 - vacancy)
-            - iz_gross / (1 - vacancy) * (1 - vacancy)
-        ) / (market_units * unit_sf * 12)
-        # Simpler: directly from NOI equation
         rent_to_pencil = (
             (target_noi + opex_total) / ((1 - vacancy) * 12)
             - affordable_units * unit_sf * iz_rent
@@ -233,6 +313,8 @@ def run_proforma(row: pd.Series, cfg: dict) -> dict:
         "market_units": market_units,
         "affordable_units": affordable_units,
         "construction_months_total": total_months,
+        "chosen_max_gfa": max_gfa,
+        "chosen_stories": stories,
     }
 
 
@@ -249,10 +331,18 @@ def run_social_housing_proforma(row: pd.Series, cfg: dict) -> dict:
     - Developer fee = social_housing_developer_fee_pct
     """
     max_gfa = float(row.get("max_buildable_gfa") or 0)
-    max_units = float(row.get("max_units") or 0)
     c_type = row.get("construction_type", "type_v")
     stories = float(row.get("max_buildable_stories") or 0)
     is_historic = bool(row.get("is_historic", False))
+
+    # Per-type unit size; falls back to legacy avg_unit_sf if new keys absent.
+    # Recompute max_units from net rentable / unit_sf so that high-rise social
+    # housing (700 SF/unit) yields the correct unit count rather than the
+    # generic envelope estimate based on 1000 SF/unit.
+    unit_sf   = cfg.get(_UNIT_SF_KEY.get(c_type, "avg_unit_sf_type_v"),
+                        cfg.get("avg_unit_sf", 1000))
+    net_rentable = max_gfa * cfg.get("efficiency_ratio", 0.82)
+    max_units = net_rentable / unit_sf if unit_sf > 0 else 0
 
     if max_gfa <= 0 or max_units < 1:
         return _infeasible_social("no_envelope")
@@ -264,10 +354,9 @@ def run_social_housing_proforma(row: pd.Series, cfg: dict) -> dict:
     else:
         land_cost = float(row.get("land_cost") or 0)
 
-    unit_sf   = cfg.get("avg_unit_sf", 1000)
     vacancy   = cfg.get("vacancy_rate", 0.06)
     opex_pu   = cfg.get("opex_per_unit_annual", 8500)
-    ami_4p    = cfg.get("ami_4person", 142300)
+    ami_4p    = cfg.get("ami_4person", 163900)
     ami_weights = cfg.get("social_housing_ami_weights", [
         {"ami_pct": 0.60, "share": 1.0}
     ])
@@ -284,15 +373,13 @@ def run_social_housing_proforma(row: pd.Series, cfg: dict) -> dict:
     if noi <= 0:
         return _infeasible_social("negative_noi")
 
-    cost_key = {
-        "type_v":     "hard_cost_type_v_per_sf",
-        "type_i_mid": "hard_cost_type_i_mid_per_sf",
-        "type_i":     "hard_cost_type_i_per_sf",
-    }.get(c_type, "hard_cost_type_v_per_sf")
-    hard_cost = max_gfa * cfg[cost_key] * (1 + cfg.get("contingency_pct", 0.10))
+    hard_cost = max_gfa * cfg[_HARD_COST_KEY.get(c_type, "hard_cost_type_v_per_sf")] * (1 + cfg.get("contingency_pct", 0.10))
     soft_cost = hard_cost * cfg.get("soft_cost_pct", 0.25)
 
-    water_saf = max_units * cfg.get("dc_water_saf_credit_affordable", 3944)  # all affordable
+    water_saf = max_units * (
+        cfg.get("dc_water_saf_per_unit_market", 14500)
+        - cfg.get("dc_water_saf_credit_affordable", 3944)
+    )
     fees = water_saf
     dev_fee = (hard_cost + soft_cost) * cfg.get("social_housing_developer_fee_pct", 0.025)
 
@@ -329,6 +416,8 @@ def _infeasible(reason: str) -> dict:
         "rlv": np.nan, "rent_to_pencil_psf": np.nan,
         "iz_pct_applied": np.nan, "market_units": np.nan,
         "affordable_units": np.nan, "construction_months_total": np.nan,
+        "chosen_construction_type": None,
+        "chosen_max_gfa": np.nan, "chosen_stories": np.nan,
     }
 
 

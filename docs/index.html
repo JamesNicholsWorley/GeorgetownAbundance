@@ -51,7 +51,7 @@ details#advanced-section summary::-webkit-details-marker{display:none}
 .legend-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
 
 /* ── Stats bar ──────────────────────────────────────────────────────────── */
-#stats-bar{display:flex;align-items:center;padding:0 16px;height:80px;background:#fff;border-top:1px solid #e2e8f0;flex-shrink:0;gap:24px;flex-wrap:wrap}
+#stats-bar{display:flex;align-items:center;padding:0 16px;height:150px;background:#fff;border-top:1px solid #e2e8f0;flex-shrink:0;gap:24px;flex-wrap:wrap}
 .stat-block{display:flex;flex-direction:column;align-items:center;min-width:90px}
 .stat-num{font-size:22px;font-weight:700;color:#1a1a2e;line-height:1}
 .stat-label{font-size:10px;color:#6b7280;margin-top:2px;text-align:center}
@@ -78,8 +78,11 @@ details.bottom-panel>summary::-webkit-details-marker{display:none}
 .pf-row.test-pass{color:#15803d}
 .pf-row.test-fail{color:#b91c1c}
 .pf-eq{color:#6b7280;font-size:10px;margin-top:2px;font-style:italic}
-#pf-selected-note{font-size:11px;color:#6b7280;margin-bottom:12px;font-style:italic}
+#pf-selected-note{font-size:11px;color:#6b7280;margin-bottom:8px;font-style:italic}
 .pf-val{font-variant-numeric:tabular-nums;font-size:11px;color:#1a1a2e}
+.site-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 16px;font-size:11px;margin-bottom:14px;padding:8px 10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0}
+.site-stat-label{color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.site-stat-val{font-weight:600;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* ── Code viewer ─────────────────────────────────────────────────────────── */
 .tab-bar{display:flex;gap:4px;margin-bottom:8px}
@@ -92,6 +95,21 @@ details.bottom-panel>summary::-webkit-details-marker{display:none}
 .view-toggle button{flex:1;padding:5px 6px;border:none;background:#f8f9fa;font-size:11px;cursor:pointer;font-family:inherit;color:#374151;transition:background .1s}
 .view-toggle button.active{background:#1d4ed8;color:#fff}
 .view-toggle button:not(:last-child){border-right:1px solid #e2e8f0}
+
+/* ── Map overlay toggles ─────────────────────────────────────────────────── */
+.overlay-row{display:flex;gap:6px;margin-bottom:10px}
+.overlay-btn{flex:1;padding:5px 6px;border:1px solid #e2e8f0;border-radius:4px;background:#f8f9fa;font-size:11px;cursor:pointer;font-family:inherit;color:#374151;transition:background .1s}
+.overlay-btn.active{background:#0d9488;color:#fff;border-color:#0d9488}
+
+/* ── Ward label divIcons ─────────────────────────────────────────────────── */
+.ward-label-icon{font-size:11px;font-weight:700;color:#475569;text-shadow:0 0 4px #fff,0 0 4px #fff;pointer-events:none!important;white-space:nowrap;background:transparent;border:none;box-shadow:none}
+
+/* ── Submarket rent table ────────────────────────────────────────────────── */
+.sm-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:4px}
+.sm-table th{text-align:left;padding:2px 4px;color:#9ca3af;font-size:10px;font-weight:600;text-transform:uppercase;border-bottom:1px solid #e2e8f0}
+.sm-table td{padding:3px 4px;border-bottom:1px solid #f8fafc}
+.sm-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+.sm-table tr:last-child td{border-bottom:none}
 </style>
 </head>
 <body>
@@ -104,6 +122,7 @@ details.bottom-panel>summary::-webkit-details-marker{display:none}
     <div class="header-meta">
       <span>Terner Center methodology</span>
       <a href="https://ternercenter.berkeley.edu" target="_blank" rel="noopener">↗</a>
+      <a href="methodology.html" target="_blank" style="color:#7dd3fc;text-decoration:none;font-weight:500">How the model works →</a>
     </div>
     <label style="color:#cbd5e1;font-size:12px">Scenario:
       <select id="scenario-select">
@@ -129,6 +148,12 @@ details.bottom-panel>summary::-webkit-details-marker{display:none}
         <button id="toggle-feasible" onclick="setViewMode('feasible')">Feasible Only</button>
       </div>
 
+      <div class="section-label">Map Overlays</div>
+      <div class="overlay-row">
+        <button id="btn-ward-lines" class="overlay-btn" onclick="toggleWardLines()">Ward Lines</button>
+        <button id="btn-metro-radius" class="overlay-btn" onclick="toggleMetroRadius()">½-mi Metro</button>
+      </div>
+
       <div class="section-label">Zoning Policy</div>
 
       <div class="slider-item">
@@ -138,6 +163,24 @@ details.bottom-panel>summary::-webkit-details-marker{display:none}
         </div>
         <input type="range" id="s-zone_tier" data-key="zone_tier" min="0" max="2" step="1" value="0">
         <div class="slider-desc">Gray dots = zone-ineligible under selected policy. 0 = MU/RA/CG zones only · 1 = + metro-adjacent R-zones (McDuffie) · 2 = + all R-zones districtwide (Lewis George)</div>
+      </div>
+
+      <div class="slider-item">
+        <div class="slider-row">
+          <span class="slider-label">Height Act Multiplier</span>
+          <span class="slider-val" id="v-ha_mult">1.00×</span>
+        </div>
+        <input type="range" id="s-ha_mult" data-key="ha_mult" min="1.00" max="3.00" step="0.05" value="1.00">
+        <div class="slider-desc">Scales every parcel's Height Act limit (formula result × multiplier). 1.00× = current law (residential: sw−10 ft max 90 ft; commercial: sw+20 ft max 130 ft). Lewis George proposes 1.20×. "Repeal" ≈ 3.00×+ but zoning height still caps each parcel.</div>
+      </div>
+
+      <div class="slider-item">
+        <div class="slider-row">
+          <span class="slider-label">Metro-Adjacent HA Floor</span>
+          <span class="slider-val" id="v-ha_metro_ceil">off</span>
+        </div>
+        <input type="range" id="s-ha_metro_ceil" data-key="ha_metro_ceil" min="0" max="160" step="10" value="0">
+        <div class="slider-desc">For parcels within 0.5 mi of Metrorail, raise Height Act limit to at least this many feet. McDuffie's near-Metro provision = 130 ft. 0 = off (no metro override). Combines with multiplier above (whichever is higher applies).</div>
       </div>
 
       <div class="section-label">Market</div>
@@ -163,10 +206,10 @@ details.bottom-panel>summary::-webkit-details-marker{display:none}
       <div class="slider-item">
         <div class="slider-row">
           <span class="slider-label">YoC Spread over Exit Cap</span>
-          <span class="slider-val" id="v-yoc_spread">125 bps</span>
+          <span class="slider-val" id="v-yoc_spread">150 bps</span>
         </div>
-        <input type="range" id="s-yoc_spread" data-key="yoc_spread" min="0" max="0.030" step="0.0025" value="0.0125">
-        <div class="slider-desc">Required excess return above exit cap rate. 125 bps = standard multifamily underwriting hurdle. Hurdle = exit cap + spread.</div>
+        <input type="range" id="s-yoc_spread" data-key="yoc_spread" min="0" max="0.030" step="0.0025" value="0.015">
+        <div class="slider-desc">Required excess return above exit cap rate. 150 bps = current DC/DMV underwriting hurdle (market range 100–200 bps). Hurdle = exit cap + spread.</div>
       </div>
 
       <div class="section-label">Inclusionary Zoning</div>
@@ -351,13 +394,33 @@ details.bottom-panel>summary::-webkit-details-marker{display:none}
           <div class="slider-desc">Property management, insurance, taxes, maintenance. IREM/NAA DC metro 2025 benchmark.</div>
         </div>
 
+        <div class="section-label">Average Unit Size by Construction Type</div>
+
         <div class="slider-item">
           <div class="slider-row">
-            <span class="slider-label">Avg Unit Size</span>
-            <span class="slider-val" id="v-avg_unit_sf">1,000 SF</span>
+            <span class="slider-label">Type V — wood frame (≤4 stories)</span>
+            <span class="slider-val" id="v-unit_sf_v">1,000 SF</span>
           </div>
-          <input type="range" id="s-avg_unit_sf" data-key="avg_unit_sf" min="700" max="1300" step="50" value="1000">
-          <div class="slider-desc">Average gross SF per residential unit. Affects unit count from GFA, IZ threshold, and per-unit opex.</div>
+          <input type="range" id="s-unit_sf_v" data-key="unit_sf_v" min="600" max="1400" step="50" value="1000">
+          <div class="slider-desc">Typical DC wood-frame: 900–1,000 SF. Affects unit count, IZ threshold, and per-unit opex.</div>
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-row">
+            <span class="slider-label">Type I-mid — podium/wrap (5–8 stories)</span>
+            <span class="slider-val" id="v-unit_sf_mid">800 SF</span>
+          </div>
+          <input type="range" id="s-unit_sf_mid" data-key="unit_sf_mid" min="500" max="1200" step="50" value="800">
+          <div class="slider-desc">Typical DC podium: 750–850 SF. Transit-adjacent corridors trend lower.</div>
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-row">
+            <span class="slider-label">Type I — high-rise (9+ stories)</span>
+            <span class="slider-val" id="v-unit_sf_i">700 SF</span>
+          </div>
+          <input type="range" id="s-unit_sf_i" data-key="unit_sf_i" min="400" max="1000" step="50" value="700">
+          <div class="slider-desc">Typical DC high-rise: 600–750 SF. Capitol Riverfront/Navy Yard projects average ~500–650 SF.</div>
         </div>
 
         <div class="section-label">Feasibility Thresholds</div>
@@ -376,20 +439,27 @@ details.bottom-panel>summary::-webkit-details-marker{display:none}
         <div class="slider-item">
           <div class="slider-row">
             <span class="slider-label">DC Water SAF (market unit)</span>
-            <span class="slider-val" id="v-dc_water_saf">$22,580</span>
+            <span class="slider-val" id="v-dc_water_saf">$14,500</span>
           </div>
-          <input type="range" id="s-dc_water_saf" data-key="dc_water_saf" min="15000" max="30000" step="500" value="22580">
-          <div class="slider-desc">⚠ System Availability Fee per market-rate unit. Figure not independently verified against dcwater.com FY2026 schedule. Use with caution.</div>
+          <input type="range" id="s-dc_water_saf" data-key="dc_water_saf" min="10000" max="30000" step="500" value="14500">
+          <div class="slider-desc">System Availability Fee per market-rate unit (simplified; actual SAF is meter-size-based). ~$14,500/unit based on DC Water FAQ 4-inch meter example. TODO: calibrate against full FY26 fee matrix.</div>
         </div>
 
         <div class="slider-item">
           <div class="slider-row">
             <span class="slider-label">DOB Permit Fee</span>
-            <span class="slider-val" id="v-dob_pct">2.0%</span>
+            <span class="slider-val" id="v-dob_pct">0.8%</span>
           </div>
-          <input type="range" id="s-dob_pct" data-key="dob_pct" min="0.01" max="0.04" step="0.002" value="0.02">
-          <div class="slider-desc">DC DOB permit fee as % of construction value, plus a 10% surcharge (fixed). Source: DC DOB fee schedule.</div>
+          <input type="range" id="s-dob_pct" data-key="dob_pct" min="0.004" max="0.02" step="0.001" value="0.008">
+          <div class="slider-desc">DC DOB permit fee as % of construction value, plus a 50% plan review surcharge (fixed). Source: DC DOB tiered fee schedule (dob.dc.gov).</div>
         </div>
+
+        <div class="section-label">Submarket Rents by Ward</div>
+        <table class="sm-table" id="submarket-rent-table">
+          <thead><tr><th>Ward</th><th class="num">Base $/SF·mo</th><th class="num">Effective (× mult)</th></tr></thead>
+          <tbody id="sm-tbody"></tbody>
+        </table>
+        <div class="slider-desc">Ward-level fallback rents from <code>submarket_rents.yaml</code>. Individual neighborhoods may differ. Effective = base × Market Rent multiplier above.</div>
 
       </details><!-- /advanced -->
     </div><!-- /controls-inner -->
@@ -444,6 +514,14 @@ details.bottom-panel>summary::-webkit-details-marker{display:none}
     <summary>Pro-Forma Methodology</summary>
     <div class="panel-body">
       <div id="pf-selected-note">Click any parcel dot on the map to see its live pro-forma breakdown.</div>
+      <div class="site-stats" id="site-stats-box">
+        <div><div class="site-stat-label">Owner</div><div class="site-stat-val" id="ss-owner">—</div></div>
+        <div><div class="site-stat-label">Market Units</div><div class="site-stat-val" id="ss-mkt-units">—</div></div>
+        <div><div class="site-stat-label">IZ Affordable Units</div><div class="site-stat-val" id="ss-iz-units">—</div></div>
+        <div><div class="site-stat-label">FAR</div><div class="site-stat-val" id="ss-far">—</div></div>
+        <div><div class="site-stat-label">Street Width</div><div class="site-stat-val" id="ss-sw">—</div></div>
+        <div><div class="site-stat-label">Height Act / Effective</div><div class="site-stat-val" id="ss-ha">—</div></div>
+      </div>
       <div class="pf-grid">
 
         <div class="pf-section">
@@ -535,17 +613,80 @@ const IZ_THRESHOLD = 10;
 const AMI_4PERSON = 163900;
 const IZ_AMI_TIER = 0.60;
 const DC_WATER_CREDIT = 3944;
-const DOB_SURCHARGE = 0.10;
+const DOB_SURCHARGE = 0.50;
 const HPRB_MONTHS = 2;
+
+const COLOR_FEASIBLE  = '#22c55e';
+const COLOR_INFEASIBLE = '#f97316';
+const COLOR_INELIGIBLE = '#ef4444';
+
+// ── DC Metrorail stations (WGS-84, filtered to DC addresses from Metro_Stations_(Regional).csv)
+const METRO_STATIONS = [
+  ["Anacostia",                              38.8630, -76.9954],
+  ["Eastern Market",                         38.8846, -76.9960],
+  ["Potomac Ave",                            38.8813, -76.9855],
+  ["Stadium-Armory",                         38.8867, -76.9771],
+  ["Rhode Island Ave-Brentwood",             38.9211, -76.9959],
+  ["Minnesota Ave",                          38.8992, -76.9467],
+  ["Van Ness-UDC",                           38.9433, -77.0630],
+  ["Cleveland Park",                         38.9348, -77.0580],
+  ["Columbia Heights",                       38.9278, -77.0326],
+  ["NoMa-Gallaudet U",                       38.9070, -77.0030],
+  ["Dupont Circle",                          38.9096, -77.0434],
+  ["Navy Yard-Ballpark",                     38.8765, -77.0051],
+  ["McPherson Sq",                           38.9013, -77.0336],
+  ["Shaw-Howard U",                          38.9135, -77.0219],
+  ["Tenleytown-AU",                          38.9489, -77.0796],
+  ["Georgia Ave-Petworth",                   38.9374, -77.0235],
+  ["Takoma",                                 38.9761, -77.0182],
+  ["Brookland-CUA",                          38.9332, -76.9945],
+  ["Fort Totten",                            38.9519, -77.0022],
+  ["Benning Road",                           38.8910, -76.9384],
+  ["Deanwood",                               38.9082, -76.9353],
+  ["Foggy Bottom-GWU",                       38.9007, -77.0503],
+  ["Farragut West",                          38.9013, -77.0407],
+  ["Farragut North",                         38.9032, -77.0397],
+  ["Woodley Park-Zoo/Adams Morgan",          38.9251, -77.0524],
+  ["L'Enfant Plaza",                         38.8848, -77.0219],
+  ["Smithsonian",                            38.8880, -77.0281],
+  ["Archives-Navy Memorial-Penn Quarter",    38.8937, -77.0219],
+  ["Waterfront",                             38.8765, -77.0175],
+  ["Federal Center SW",                      38.8851, -77.0159],
+  ["Judiciary Square",                       38.8961, -77.0166],
+  ["Capitol South",                          38.8851, -77.0051],
+  ["Metro Center",                           38.8983, -77.0281],
+  ["Gallery Pl-Chinatown",                   38.8983, -77.0219],
+  ["Mt Vernon Sq 7th St-Convention Center",  38.9064, -77.0219],
+  ["U Street/Civil War Memorial/Cardozo",    38.9170, -77.0275],
+  ["Union Station",                          38.8978, -77.0074],
+  ["Congress Heights",                       38.8457, -76.9885],
+  ["Friendship Heights",                     38.9595, -77.0850],
+  ["Federal Triangle",                       38.8932, -77.0281],
+];
+const METRO_RADIUS_M = 804.67;  // 0.5 statute miles in metres
+
+// ── Ward-level fallback rents from submarket_rents.yaml ─────────────────────
+const WARD_RENTS = [
+  {w: 1, base: 3.00},
+  {w: 2, base: 3.70},
+  {w: 3, base: 3.20},
+  {w: 4, base: 2.40},
+  {w: 5, base: 2.30},
+  {w: 6, base: 3.50},
+  {w: 7, base: 1.65},
+  {w: 8, base: 1.55},
+];
 
 // ── Slider config ─────────────────────────────────────────────────────────────
 // Maps each slider key to its default value and display format.
 // Format tokens: pct|bps|dollar|mult|months|psf|sf|speed|tier
 const SLIDER_DEFS = {
   zone_tier:      { def: 0,       fmt: 'tier'   },
+  ha_mult:        { def: 1.00,    fmt: 'mult'   },
+  ha_metro_ceil:  { def: 0,       fmt: 'ft'     },
   rent_mult:      { def: 1.00,    fmt: 'mult'   },
   exit_cap:       { def: 0.050,   fmt: 'pct'    },
-  yoc_spread:     { def: 0.0125,  fmt: 'bps'    },
+  yoc_spread:     { def: 0.015,   fmt: 'bps'    },
   iz_wood:        { def: 0.11,    fmt: 'pct'    },
   iz_concrete:    { def: 0.083,   fmt: 'pct'    },
   ent_speedup:    { def: 0.0,     fmt: 'speed'  },
@@ -564,10 +705,12 @@ const SLIDER_DEFS = {
   ent_zc:         { def: 15,      fmt: 'months' },
   vacancy:        { def: 0.06,    fmt: 'pct'    },
   opex_pu:        { def: 8500,    fmt: 'dollar' },
-  avg_unit_sf:    { def: 1000,    fmt: 'sf'     },
+  unit_sf_v:      { def: 1000,    fmt: 'sf'     },
+  unit_sf_mid:    { def: 800,     fmt: 'sf'     },
+  unit_sf_i:      { def: 700,     fmt: 'sf'     },
   min_roc:        { def: 0.065,   fmt: 'pct'    },
-  dc_water_saf:   { def: 22580,   fmt: 'dollar' },
-  dob_pct:        { def: 0.02,    fmt: 'pct'    },
+  dc_water_saf:   { def: 14500,   fmt: 'dollar' },
+  dob_pct:        { def: 0.008,   fmt: 'pct'    },
 };
 
 const ZONE_TIER_LABELS = ['Current zoning', '+Metro R-zones', '+All R-zones'];
@@ -583,6 +726,7 @@ function fmtVal(fmt, v) {
     case 'psf':    return '$' + Math.round(v) + '/SF';
     case 'sf':     return v.toLocaleString() + ' SF';
     case 'speed':  return Math.round(v * 100) + '% faster';
+    case 'ft':     return v > 0 ? Math.round(v) + ' ft' : 'off';
     default:       return v.toFixed(2);
   }
 }
@@ -601,6 +745,7 @@ const SCENARIO_PRESETS = {
   },
   lewis_george: {
     zone_tier:      2,
+    ha_mult:        1.20,   // +20% Height Act amendment for affordable projects
     iz_wood:        0.15,
     iz_concrete:    0.13,
     topa_months:    4,
@@ -608,6 +753,7 @@ const SCENARIO_PRESETS = {
   },
   mcduffie: {
     zone_tier:      1,
+    ha_metro_ceil:  130,    // raise HA cap to 130 ft for metro-adjacent parcels
     ent_speedup:    0.50,
     topa_months:    0,
     topa_exit_prem: 0.0,
@@ -616,7 +762,7 @@ const SCENARIO_PRESETS = {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let cfg = Object.fromEntries(Object.entries(SLIDER_DEFS).map(([k,v]) => [k, v.def]));
-let allParcels = [];          // stable physical soft site pool (12,426 parcels)
+let allParcels = [];          // stable physical soft site pool
 let markerLayer = null;
 let markers = [];
 let markerResults = [];       // parallel to markers; stores last proforma result + eligibility
@@ -628,6 +774,12 @@ let currentScenario = 'baseline';
 let showMode = 'all';         // 'all' | 'feasible'
 // Per-scenario user customisations saved on scenario switch
 let scenarioOverrides = { baseline: {}, lewis_george: {}, mcduffie: {} };
+// Map overlay layers
+let wardLayer = null;
+let wardGeoJson = null;
+let showWardLines = false;
+let metroLayer = null;
+let showMetroRadius = false;
 
 // ── Pro-forma engine (mirrors proforma.py::run_proforma) ─────────────────────
 function constructionMonths(units, stories, entMo, isHistoric) {
@@ -641,59 +793,78 @@ function constructionMonths(units, stories, entMo, isHistoric) {
   return entMo + hprb + buildMo;
 }
 
-function runProforma(p) {
-  const unitSf = cfg.avg_unit_sf;
-  const maxUnits = p.nr / unitSf;
-  if (maxUnits < 1) return { feasible: false, binding: 'no_units', eligible: true };
+// Recompute Height-Act-adjusted envelope from stored parcel fields.
+// Uses cfg.ha_mult to scale the stored ha; for metro-adjacent parcels (p.ma === 1),
+// also raises the cap to at least cfg.ha_metro_ceil ft (mirrors McDuffie's metro_half_mile
+// rule in envelope.py). Then applies zoning_height (p.zh) as a ceiling and zoning_stories
+// (p.zs) as a fallback story cap when FAR data is missing. Takes min of height-constrained
+// GFA and FAR cap. Returns { mg, nr, ct, st, ha, eh } with adjusted values.
+function computeAdjustedEnvelope(p) {
+  const multHa  = p.ha * cfg.ha_mult;
+  const metroFloor = (p.ma === 1 && cfg.ha_metro_ceil > 0) ? cfg.ha_metro_ceil : 0;
+  const newHa   = Math.max(multHa, metroFloor);
+  const newEh   = p.zh > 0 ? Math.min(p.zh, newHa) : newHa;
+  const heightSt = newEh / 12;
+  // Footprint derived from stored values (valid regardless of which constraint was binding)
+  const fp    = p.st > 0 ? p.mg / p.st : 0;
+  // FAR cap: lsf × far when present; otherwise fall back to footprint × min(zs, heightSt)
+  // mirroring envelope.py:198-202. zs (zoning_stories) caps the height-only build.
+  const stCap = (p.zs > 0) ? Math.min(p.zs, heightSt) : heightSt;
+  const newSt = stCap;
+  const gfaH  = fp * stCap;
+  const gfaF  = p.lsf > 0 && p.far > 0 ? p.lsf * p.far : gfaH;
+  const newMg = Math.min(gfaH, gfaF);
+  const newNr = newMg * EFFICIENCY;
+  const newCt = newSt <= 4 ? 0 : newSt <= 8 ? 1 : 2;
+  return { mg: newMg, nr: newNr, ct: newCt, st: newSt, ha: newHa, eh: newEh };
+}
 
-  const izPct = maxUnits >= IZ_THRESHOLD
-    ? (p.ct === 0 ? cfg.iz_wood : cfg.iz_concrete)
-    : 0;
-  const marketUnits    = maxUnits * (1 - izPct);
-  const affordUnits    = maxUnits * izPct;
-  const izRentPsf      = (AMI_4PERSON * 0.875 * IZ_AMI_TIER * 0.30) / (12 * unitSf);
-  const rentPsf        = p.rp * cfg.rent_mult;
+// Full financial pro-forma at a given (pre-computed) envelope.
+// Always returns RLV — even for negative-NOI cases stabValue=0 so RLV is very
+// negative — enabling the optimizer in runProforma() to rank all options.
+function _proformaAtEnv(p, env) {
+  const unitSf   = [cfg.unit_sf_v, cfg.unit_sf_mid, cfg.unit_sf_i][env.ct] || cfg.unit_sf_v;
+  const maxUnits = env.nr / unitSf;
+  if (maxUnits < 1) return { feasible: false, binding: 'no_units', rlv: -1e15, eligible: true, env };
 
-  const grossMarket    = marketUnits * unitSf * rentPsf * 12;
-  const grossIz        = affordUnits * unitSf * izRentPsf * 12;
-  const egi            = (grossMarket + grossIz) * (1 - cfg.vacancy);
-  const noi            = egi - maxUnits * cfg.opex_pu;
+  const izPct      = maxUnits >= IZ_THRESHOLD ? (env.ct === 0 ? cfg.iz_wood : cfg.iz_concrete) : 0;
+  const marketUnits = maxUnits * (1 - izPct);
+  const affordUnits = maxUnits * izPct;
+  const izRentPsf   = (AMI_4PERSON * 0.875 * IZ_AMI_TIER * 0.30) / (12 * unitSf);
+  const rentPsf     = p.rp * cfg.rent_mult;
+  const grossMarket = marketUnits * unitSf * rentPsf * 12;
+  const grossIz     = affordUnits * unitSf * izRentPsf * 12;
+  const egi         = (grossMarket + grossIz) * (1 - cfg.vacancy);
+  const noi         = egi - maxUnits * cfg.opex_pu;
 
-  if (noi <= 0) return { feasible: false, binding: 'noi', noi, eligible: true };
-
-  const stabValue = noi / cfg.going_in_cap;
-  const hcPsf     = [cfg.hc_v, cfg.hc_mid, cfg.hc_i][p.ct] || cfg.hc_v;
-  const hardCost  = p.mg * hcPsf * (1 + cfg.contingency);
+  // stabValue = 0 when NOI ≤ 0; TDC is still computed so RLV can rank options
+  const stabValue = noi > 0 ? noi / cfg.going_in_cap : 0;
+  const hcPsf     = [cfg.hc_v, cfg.hc_mid, cfg.hc_i][env.ct] || cfg.hc_v;
+  const hardCost  = env.mg * hcPsf * (1 + cfg.contingency);
   const softCost  = hardCost * cfg.soft_pct;
-
   const waterSaf  = maxUnits * cfg.dc_water_saf - affordUnits * DC_WATER_CREDIT;
   const dobFees   = hardCost * cfg.dob_pct * (1 + DOB_SURCHARGE);
   const fees      = waterSaf + dobFees;
-
   let entMo = p.hp ? cfg.ent_zc : cfg.ent_byright;
-  entMo     = entMo * (1 - cfg.ent_speedup);
-  entMo    += cfg.topa_months;
-  const totalMo = constructionMonths(maxUnits, p.st, entMo, p.ih === 1);
-
+  entMo = entMo * (1 - cfg.ent_speedup) + cfg.topa_months;
+  const totalMo = constructionMonths(maxUnits, env.st, entMo, p.ih === 1);
   const debt    = (hardCost + softCost) * cfg.ltc;
   const carry   = debt * cfg.loan_rate * (totalMo / 12) * 0.60;
   const devFee  = (hardCost + softCost + fees) * cfg.dev_fee_pct;
   const landCost = p.lc;
   const tdc     = landCost + hardCost + softCost + fees + carry + devFee;
-
   const exitCap = cfg.exit_cap + cfg.topa_exit_prem;
   const yoc     = noi / tdc;
   const roc     = stabValue / tdc - 1;
   const rlv     = stabValue - (tdc - landCost);
-
-  const yocOk = yoc >= exitCap + cfg.yoc_spread;
-  const rocOk = roc >= cfg.min_roc;
-  const rlvOk = rlv >= p.alv;
+  const yocOk   = noi > 0 && yoc >= exitCap + cfg.yoc_spread;
+  const rocOk   = noi > 0 && roc >= cfg.min_roc;
+  const rlvOk   = rlv >= p.alv;
   const feasible = yocOk && rocOk && rlvOk;
-  const binding  = !yocOk ? 'yoc' : !rocOk ? 'roc' : !rlvOk ? 'rlv' : null;
+  const binding  = !yocOk ? (noi <= 0 ? 'noi' : 'yoc') : !rocOk ? 'roc' : !rlvOk ? 'rlv' : null;
 
   return {
-    feasible, binding, eligible: true, noi, stabValue, tdc, landCost, hardCost, softCost,
+    feasible, binding, eligible: true, env, noi, stabValue, tdc, landCost, hardCost, softCost,
     fees, carry, devFee, yoc, roc, rlv,
     grossMarket, grossIz, egi,
     maxUnits, izPct, marketUnits, affordUnits, rentPsf, izRentPsf,
@@ -701,10 +872,161 @@ function runProforma(p) {
   };
 }
 
+// Height caps (ft) at the upper boundary of each construction type.
+// A Type V building must stay ≤ 4 stories (48 ft); Type I-mid ≤ 8 stories (96 ft).
+// We evaluate each achievable type at its maximum stories and pick the highest RLV.
+const _TYPE_HEIGHT_CAPS = [48, 96, Infinity];
+
+function runProforma(p) {
+  const maxEnv = computeAdjustedEnvelope(p);
+  const fp = p.st > 0 ? p.mg / p.st : 0;  // buildable footprint
+  if (fp <= 0) return { feasible: false, binding: 'no_units', rlv: -1e15, eligible: true, env: maxEnv };
+
+  // Try each construction type that the parcel's allowed height can support.
+  // For each type, cap the effective height at the type's story boundary so we
+  // don't accidentally price a 6-story building as Type V ($280/SF).
+  // Feasibility is a hard filter, RLV the tiebreaker: a developer won't build
+  // a larger-but-unfinanceable option just because its absolute RLV is higher.
+  // Only when no option is feasible do we fall back to global max-RLV.
+  let best = null;
+  for (let ct = 0; ct <= maxEnv.ct; ct++) {
+    const capEh  = Math.min(maxEnv.eh, _TYPE_HEIGHT_CAPS[ct]);
+    const heightSt = capEh / 12;
+    // zs (zoning_stories) caps height-only fallback when FAR data is missing,
+    // mirroring envelope.py:198-202.
+    const capSt  = (p.zs > 0) ? Math.min(p.zs, heightSt) : heightSt;
+    const gfaH   = fp * capSt;
+    const gfaF   = p.lsf > 0 && p.far > 0 ? p.lsf * p.far : gfaH;
+    const capMg  = Math.min(gfaH, gfaF);
+    const capNr  = capMg * EFFICIENCY;
+    const capCt  = capSt <= 4 ? 0 : capSt <= 8 ? 1 : 2;
+    const env    = { mg: capMg, nr: capNr, ct: capCt, st: capSt, ha: maxEnv.ha, eh: capEh };
+    const res    = _proformaAtEnv(p, env);
+    const better = !best
+                || (res.feasible && !best.feasible)
+                || (res.feasible === best.feasible && res.rlv > best.rlv);
+    if (better) best = res;
+  }
+  return best || { feasible: false, binding: 'no_units', rlv: -1e15, eligible: true, env: maxEnv };
+}
+
+// ── Map overlay: ward lines ───────────────────────────────────────────────────
+function toggleWardLines() {
+  showWardLines = !showWardLines;
+  document.getElementById('btn-ward-lines').classList.toggle('active', showWardLines);
+  if (!showWardLines) {
+    if (wardLayer) { wardLayer.remove(); wardLayer = null; }
+    return;
+  }
+  if (wardGeoJson) { drawWardLayer(); return; }
+  // Fetch once from DC GIS REST API
+  const url = 'https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Administrative_Other_Boundaries_WebMercator/MapServer/31/query'
+    + '?where=1%3D1&outFields=WARD_ID,NAME&outSR=4326&f=geojson';
+  fetch(url)
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(gj => { wardGeoJson = gj; drawWardLayer(); })
+    .catch(err => {
+      console.error('Ward boundary fetch failed:', err);
+      showWardLines = false;
+      document.getElementById('btn-ward-lines').classList.remove('active');
+    });
+}
+
+function drawWardLayer() {
+  if (wardLayer) { wardLayer.remove(); wardLayer = null; }
+  wardLayer = L.layerGroup();
+
+  // Ward boundaries — rendered in wardPane (z-350, pointer-events:none) so they
+  // never intercept clicks regardless of whether the layer is on or off.
+  L.geoJSON(wardGeoJson, {
+    pane: 'wardPane',
+    style: { color: '#475569', weight: 2, fillOpacity: 0, dashArray: '6 4' },
+  }).addTo(wardLayer);
+
+  // Ward number labels — L.divIcon markers in markerPane (z-600) with
+  // pointer-events:none CSS so they don't block clicks either.
+  wardGeoJson.features.forEach(f => {
+    const id = String(f.properties.WARD_ID || f.properties.NAME || '').replace(/\D/g, '');
+    const pos = WARD_LABEL_POS[id];
+    if (!pos) return;
+    L.marker(pos, {
+      icon: L.divIcon({ html: 'Ward ' + id, className: 'ward-label-icon', iconSize: [44, 16], iconAnchor: [22, 8] }),
+      interactive: false,
+      keyboard: false,
+    }).addTo(wardLayer);
+  });
+
+  wardLayer.addTo(map);
+}
+
+// ── Map overlay: metro radius circles ────────────────────────────────────────
+function toggleMetroRadius() {
+  showMetroRadius = !showMetroRadius;
+  document.getElementById('btn-metro-radius').classList.toggle('active', showMetroRadius);
+  if (!showMetroRadius) {
+    if (metroLayer) { metroLayer.remove(); metroLayer = null; }
+    return;
+  }
+  metroLayer = L.layerGroup();
+  METRO_STATIONS.forEach(([name, lat, lon]) => {
+    // Radius circle in metroPane (z-360, pointer-events:none) — never blocks clicks.
+    L.circle([lat, lon], {
+      pane: 'metroPane',
+      radius: METRO_RADIUS_M,
+      color: '#6366f1', fillColor: '#6366f1', fillOpacity: 0.07,
+      weight: 1.5, dashArray: '5 4',
+    }).addTo(metroLayer);
+    // Station marker: canvas-rendered (same renderer as parcels) so it lives in the
+    // canvas and its tooltip works without any SVG-vs-canvas conflict.
+    L.circleMarker([lat, lon], {
+      renderer,
+      radius: 5, color: '#4f46e5', fillColor: '#fff', fillOpacity: 1, weight: 2,
+    }).bindTooltip(name, { sticky: true }).addTo(metroLayer);
+  });
+  metroLayer.addTo(map);
+}
+
+// ── Submarket rent reference table ───────────────────────────────────────────
+function updateSubmarketTable() {
+  const tbody = document.getElementById('sm-tbody');
+  if (!tbody) return;
+  const mult = cfg.rent_mult || 1;
+  tbody.innerHTML = WARD_RENTS.map(({w, base}) => {
+    const eff = (base * mult).toFixed(2);
+    const diff = ((base * mult - base) >= 0 ? '+' : '') + ((base * mult - base).toFixed(2));
+    const color = mult > 1 ? '#15803d' : mult < 1 ? '#b91c1c' : '#374151';
+    return `<tr>`
+      + `<td style="color:#374151">Ward ${w}</td>`
+      + `<td class="num" style="color:#6b7280">$${base.toFixed(2)}</td>`
+      + `<td class="num" style="font-weight:600;color:${color}">$${eff}/SF</td>`
+      + `</tr>`;
+  }).join('');
+}
+
 // ── Map initialization ────────────────────────────────────────────────────────
+// Approximate visual centers for each DC ward — used for permanent divIcon labels.
+const WARD_LABEL_POS = {
+  '1': [38.920, -77.036], '2': [38.906, -77.050],
+  '3': [38.946, -77.075], '4': [38.955, -77.024],
+  '5': [38.918, -76.985], '6': [38.879, -77.005],
+  '7': [38.888, -76.946], '8': [38.856, -76.975],
+};
+
 function initMap() {
   map = L.map('map', { preferCanvas: true }).setView([38.905, -77.010], 12);
   renderer = L.canvas({ padding: 0.5 });
+
+  // Custom panes below the canvas overlayPane (z-index 400).
+  // pointer-events:none on the pane div ensures nothing in these panes ever
+  // intercepts clicks destined for the canvas-rendered parcel dots — even if
+  // Leaflet leaves SVG container elements behind after layer removal.
+  map.createPane('wardPane');
+  map.getPane('wardPane').style.zIndex = 350;
+  map.getPane('wardPane').style.pointerEvents = 'none';
+
+  map.createPane('metroPane');
+  map.getPane('metroPane').style.zIndex = 360;
+  map.getPane('metroPane').style.pointerEvents = 'none';
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com">CARTO</a>',
     maxZoom: 19,
@@ -715,8 +1037,8 @@ function initMap() {
     const d = L.DomUtil.create('div', 'map-legend');
     d.innerHTML = '<b style="display:block;margin-bottom:4px">Soft Sites</b>'
       + '<span class="legend-dot" style="background:#22c55e"></span>Feasible<br>'
-      + '<span class="legend-dot" style="background:#ef4444"></span>Infeasible<br>'
-      + '<span class="legend-dot" style="background:#9ca3af"></span>Zone ineligible<br>'
+      + '<span class="legend-dot" style="background:#f97316"></span>Infeasible<br>'
+      + '<span class="legend-dot" style="background:#ef4444"></span>Zone ineligible<br>'
       + '<small style="color:#9ca3af">Circle size ∝ √units</small>';
     return d;
   };
@@ -752,8 +1074,8 @@ function renderParcels() {
     const m = L.circleMarker([p.la, p.lo], {
       renderer,
       radius: 4,
-      color: '#9ca3af',
-      fillColor: '#9ca3af',
+      color: COLOR_INELIGIBLE,
+      fillColor: COLOR_INELIGIBLE,
       fillOpacity: 0.45,
       weight: 0,
     });
@@ -781,12 +1103,15 @@ function recompute() {
   for (let i = 0; i < allParcels.length; i++) {
     const p = allParcels[i];
     const isEligible = p.el <= zoneTier;
-    const u = p.nr / cfg.avg_unit_sf;
-    const r = Math.min(Math.max(3, Math.sqrt(u) * 1.5), 18);
 
     if (!isEligible) {
+      // Still need a radius for ineligible dots — use max envelope
+      const env = computeAdjustedEnvelope(p);
+      const unitSf = [cfg.unit_sf_v, cfg.unit_sf_mid, cfg.unit_sf_i][env.ct] || cfg.unit_sf_v;
+      const u = env.nr / unitSf;
+      const r = Math.min(Math.max(3, Math.sqrt(u) * 1.5), 18);
       markerResults[i] = { feasible: false, eligible: false, binding: 'zone' };
-      markers[i].setStyle({ color: '#9ca3af', fillColor: '#9ca3af', fillOpacity: 0.45, radius: r });
+      markers[i].setStyle({ color: COLOR_INELIGIBLE, fillColor: COLOR_INELIGIBLE, fillOpacity: 0.45, radius: r });
       continue;
     }
 
@@ -794,10 +1119,14 @@ function recompute() {
     const res = runProforma(p);
     markerResults[i] = res;
 
-    const color = res.feasible ? '#22c55e' : '#ef4444';
+    // Use optimal construction type's unit count for dot sizing and stats
+    const optU = res.maxUnits || 0;
+    const r = Math.min(Math.max(3, Math.sqrt(optU) * 1.5), 18);
+
+    const color = res.feasible ? COLOR_FEASIBLE : COLOR_INFEASIBLE;
     markers[i].setStyle({ color, fillColor: color, fillOpacity: 0.75, radius: r });
 
-    if (res.feasible) { feasible++; units += u; }
+    if (res.feasible) { feasible++; units += optU; }
     if (res.binding && res.binding !== 'zone') {
       bindingCounts[res.binding] = (bindingCounts[res.binding] || 0) + 1;
     }
@@ -863,16 +1192,24 @@ function updateGauge(pct) {
 }
 
 // ── Pro-forma panel ───────────────────────────────────────────────────────────
+function markerColor(res) {
+  if (!res || !res.eligible) return COLOR_INELIGIBLE;
+  return res.feasible ? COLOR_FEASIBLE : COLOR_INFEASIBLE;
+}
+
 function selectParcel(i) {
-  // Don't select hidden markers in feasible-only mode
   if (showMode === 'feasible' && markerResults[i] && !markerResults[i].feasible) return;
+
+  // Restore previously selected marker — only touch 2 markers, not all 12k
+  if (selectedIdx >= 0 && selectedIdx !== i) {
+    const c = markerColor(markerResults[selectedIdx]);
+    markers[selectedIdx].setStyle({ weight: 0, color: c, fillColor: c });
+  }
+
   selectedIdx = i;
-  // Highlight selected marker
-  markers.forEach((m, j) => {
-    m.setStyle({ weight: j === i ? 2 : 0, color: j === i ? '#000' : markerResults[j]?.feasible ? '#22c55e' : '#ef4444' });
-  });
+  markers[i].setStyle({ weight: 2, color: '#000' });
+
   showProformaPanel(i);
-  // Open the pro-forma section if collapsed
   const det = document.querySelector('.bottom-panel');
   if (det && !det.open) det.open = true;
   det.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -886,7 +1223,22 @@ function showProformaPanel(i) {
   const note = `${p.a || p.s} · Ward ${p.w} · ${p.nb || ''}`;
   document.getElementById('pf-selected-note').textContent = note;
 
-  const maxUnits = p.nr / cfg.avg_unit_sf;
+  // Site stats — use adjusted envelope values from pro-forma result
+  const env = res.env || computeAdjustedEnvelope(p);
+  set('ss-owner',    p.own || '—');
+  set('ss-mkt-units', res.marketUnits != null ? Math.round(res.marketUnits).toLocaleString() : '—');
+  set('ss-iz-units',  res.affordUnits != null ? Math.round(res.affordUnits).toLocaleString()  : '—');
+  set('ss-far',      p.far > 0 ? p.far.toFixed(2) : '—');
+  set('ss-sw',       p.sw > 0  ? p.sw + ' ft' : '—');
+  // Show adjusted Height Act limit and effective height
+  const haDisp = env.ha > 0
+    ? (env.eh > 0 && Math.round(env.eh) !== Math.round(env.ha)
+        ? Math.round(env.ha) + ' ft / ' + Math.round(env.eh) + ' ft eff.'
+        : Math.round(env.ha) + ' ft')
+    : '—';
+  set('ss-ha', haDisp);
+
+  const maxUnits = res.maxUnits || 0;
 
   // Revenue
   set('pf-gross-market', fmtMoney(res.grossMarket));
@@ -940,7 +1292,8 @@ function fmtPct(v) {
 
 function clearProformaPanel() {
   document.getElementById('pf-selected-note').textContent = 'Click any parcel dot on the map to see its live pro-forma breakdown.';
-  ['pf-gross-market','pf-gross-iz','pf-egi','pf-noi','pf-stab-val',
+  ['ss-owner','ss-mkt-units','ss-iz-units','ss-far','ss-sw','ss-ha',
+   'pf-gross-market','pf-gross-iz','pf-egi','pf-noi','pf-stab-val',
    'pf-land','pf-hard','pf-soft','pf-fees','pf-carry','pf-devfee','pf-tdc',
    'pf-yoc','pf-yoc-thresh','pf-roc','pf-roc-thresh','pf-rlv','pf-rlv-thresh','pf-verdict'
   ].forEach(id => set(id, '—'));
@@ -959,6 +1312,7 @@ function initSliders() {
       const v = parseFloat(slider.value);
       cfg[key] = v;
       if (valEl) valEl.textContent = fmtVal(fmt, v);
+      if (key === 'rent_mult') updateSubmarketTable();
       scheduleRecompute();
     });
   });
@@ -1053,7 +1407,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initSliders();
   initScenarioSelector();
   initCodePanel();
-  loadSoftSites();   // load stable pool once; scenario selector only changes financial presets
+  updateSubmarketTable();   // populate on load
+  loadSoftSites();          // load stable pool once; scenario selector only changes financial presets
 });
 </script>
 </body>

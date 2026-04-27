@@ -56,9 +56,21 @@ def height_act_limit(street_width_ft: float, use_type: str, address: str = "") -
 _COMMERCIAL_USE_PREFIXES = ("3", "4", "5", "7")
 _RESIDENTIAL_USE_PREFIXES = ("1", "2")
 
+# Zones that use the commercial Height Act formula (street_width + 20 ft)
+# regardless of USECODE. Most 0xx parcels in these zones are mixed-use or
+# industrial-converted and would be built as commercial-class structures.
+_COMMERCIAL_ZONE_PREFIXES = ("MU", "RA", "CG", "C-", "CR", "D-", "PDR")
 
-def parcel_use_type(usecode: str) -> str:
-    """Classify parcel as "residential" or "commercial" for Height Act purposes."""
+
+def parcel_use_type(usecode: str, zone: str = "") -> str:
+    """Classify parcel as "residential" or "commercial" for Height Act purposes.
+
+    Zone takes precedence: MU, RA, CG, C-*, CR, and D- zones are commercial.
+    Falls back to USECODE prefix classification when zone is ambiguous.
+    """
+    zone_str = str(zone or "").strip()
+    if any(zone_str.startswith(p) for p in _COMMERCIAL_ZONE_PREFIXES):
+        return "commercial"
     if not usecode or pd.isna(usecode):
         return "residential"
     prefix = str(usecode).strip()[:1]
@@ -140,7 +152,7 @@ def compute_envelope(row: pd.Series, cfg: dict) -> dict:
     floor_to_floor = cfg.get("floor_to_floor_ft", 12)
 
     # Determine use type for Height Act
-    use_type = parcel_use_type(row.get("USECODE", ""))
+    use_type = parcel_use_type(row.get("USECODE", ""), row.get("zone_normalized", ""))
 
     # Height Act limit
     ha_ft = height_act_limit(
